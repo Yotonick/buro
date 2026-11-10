@@ -1,0 +1,53 @@
+extends Node
+## Поток игры: меню <-> лобби. Также разбирает аргументы командной строки
+## (быстрый запуск и автотесты): -- --host | --join=IP [--port=N] [--name=X]
+## [--report-after=СЕК] [--quit-after=СЕК]
+
+const MENU := "res://ui/main_menu.tscn"
+const LOBBY := "res://ui/lobby.tscn"
+
+## Сообщение, которое меню покажет при следующем открытии (причина разрыва).
+var pending_message := ""
+
+func _ready() -> void:
+	Net.session_started.connect(_on_session_started)
+	Net.session_ended.connect(_on_session_ended)
+	_apply_cmdline.call_deferred()
+
+func _on_session_started() -> void:
+	get_tree().change_scene_to_file(LOBBY)
+
+func _on_session_ended(reason: String) -> void:
+	pending_message = reason
+	get_tree().change_scene_to_file(MENU)
+
+func _apply_cmdline() -> void:
+	var args := {}
+	for a in OS.get_cmdline_user_args():
+		var kv := a.trim_prefix("--").split("=", true, 1)
+		args[kv[0]] = kv[1] if kv.size() > 1 else ""
+	if args.is_empty():
+		return
+	var player_name := str(args.get("name", Settings.player_name))
+	var port := int(args.get("port", Settings.port))
+	var err := ""
+	if args.has("host"):
+		err = Net.host_game(player_name, port)
+	elif args.has("join"):
+		err = Net.join_game(player_name, str(args["join"]), port)
+	if err != "":
+		print("NET_ERROR ", err)
+	Net.session_ended.connect(func(reason: String): print("SESSION_ENDED ", reason))
+	if args.has("report-after"):
+		get_tree().create_timer(float(args["report-after"])).timeout.connect(_report)
+	if args.has("quit-after"):
+		get_tree().create_timer(float(args["quit-after"])).timeout.connect(get_tree().quit)
+
+func _report() -> void:
+	var names: Array = []
+	for id in Net.players:
+		names.append("%s#%d" % [Net.players[id]["name"], Net.players[id]["slot"]])
+	names.sort()
+	print("REPORT ", JSON.stringify({"in_session": Net.in_session(), "host": Net.is_host(),
+		"scene": get_tree().current_scene.scene_file_path if get_tree().current_scene else "",
+		"players": names}))
