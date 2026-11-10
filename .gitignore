@@ -1,0 +1,18 @@
+# Godot 4
+.godot/
+*.translation
+export_presets.cfg.bak
+.import/
+*.tmp
+
+# Сборки
+build/
+dist/
+*.exe
+*.pck
+*.zip
+
+# ОС / редакторы
+.DS_Store
+Thumbs.db
+.vscode/
