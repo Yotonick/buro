@@ -8,6 +8,7 @@ func _ready() -> void:
 	_key("move_left", [KEY_A, KEY_LEFT])
 	_key("move_right", [KEY_D, KEY_RIGHT])
 	_key("jump", [KEY_SPACE])
+	_key("use", [KEY_E])
 	_key("flop", [KEY_F])
 	_key("laugh", [KEY_T])
 	_key("respawn", [KEY_R])

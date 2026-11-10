@@ -11,6 +11,8 @@ const NetWorld := preload("res://net/net_world.gd")
 const HelmetProp := preload("res://characters/kombez/helmet_prop.gd")
 const CameraScript := preload("res://characters/player_camera.gd")
 const ControllerScript := preload("res://characters/player_controller.gd")
+const Tape := preload("res://physics/tape.gd")
+const TapeRoll := preload("res://tools/tape_roll.gd")
 const HudScript := preload("res://ui/game_hud.gd")
 
 const FALL_Y := -15.0
@@ -45,6 +47,8 @@ func _ready() -> void:
 	add_child(world)
 	world.add_spawner("kombez", _make_kombez)
 	world.add_spawner("helmet", HelmetProp.create)
+	world.add_spawner("tape", Tape.create)
+	world.add_spawner("tape_roll", TapeRoll.create)
 	world.spawned.connect(_on_spawned)
 	world.player_action.connect(_on_player_action)
 

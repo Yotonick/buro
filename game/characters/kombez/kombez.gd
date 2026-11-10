@@ -194,6 +194,17 @@ func laugh() -> void:
 	if state == State.ACTIVE:
 		laugh_time = 1.6
 
+## Пустить в дело то, что в руках (изолента и другие инструменты). Решает хост.
+func use() -> void:
+	if puppet:
+		action_requested.emit(&"use")
+		return
+	if state != State.ACTIVE:
+		return
+	for h in [hand_l, hand_r]:
+		if h.held != null and is_instance_valid(h.held) and h.held.has_method("use_tool"):
+			h.held.use_tool(self, h)
+
 func equip_helmet(color: Color) -> void:
 	has_helmet = true
 	helmet_color = color

@@ -28,3 +28,5 @@ func _physics_process(_dt: float) -> void:
 		kombez.flop()
 	if Input.is_action_just_pressed("laugh"):
 		kombez.laugh()
+	if Input.is_action_just_pressed("use"):
+		kombez.use()

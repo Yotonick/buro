@@ -36,6 +36,8 @@ var local_kombez: Kombez:
 
 var _spawners := {}            ## kind -> Callable(params) -> Node
 var _nodes := {}               ## id -> Node3D
+var _ids := {}                 ## Node3D -> id
+var _states := {}              ## id -> Dictionary: состояние объекта (sync_state)
 var _dyn := {}                 ## id -> [kind, params]   (только динамические)
 var _kombez_by_peer := {}      ## peer -> Kombez
 var _next_static := 1
@@ -131,6 +133,24 @@ func request_action(action: StringName) -> void:
 	else:
 		_action.rpc_id(1, action)
 
+## Номер объекта в общем мире (0 — объект не на учёте, например стена).
+func id_of(node: Object) -> int:
+	return _ids.get(node, 0)
+
+func node_of(id: int) -> Node3D:
+	return _nodes.get(id)
+
+## Разослать всем состояние объекта, которое не видно по его положению (сколько ленты
+## в рулоне, открыт ли вентиль…). У клиентов вызовется node.net_state(data);
+## опоздавший игрок получит последнее состояние при входе. Только хост / одиночная игра.
+func sync_state(node: Node3D, data: Dictionary) -> void:
+	var id := id_of(node)
+	if id == 0 or not is_authority():
+		return
+	_states[id] = data
+	for peer in _ready_peers:
+		_state.rpc_id(peer, id, data)
+
 func kombez_of(peer: int) -> Kombez:
 	var k: Kombez = _kombez_by_peer.get(peer)
 	return k if is_instance_valid(k) else null
@@ -149,6 +169,7 @@ func _create(id: int, kind: String, params: Dictionary) -> Node:
 
 func _register(id: int, node: Node3D) -> void:
 	_nodes[id] = node
+	_ids[node] = id
 	if node is Kombez and node.peer_id > 0:
 		_kombez_by_peer[node.peer_id] = node
 	if not is_authority():
@@ -160,7 +181,9 @@ func _register(id: int, node: Node3D) -> void:
 	node.tree_exiting.connect(_on_node_gone.bind(id))
 
 func _on_node_gone(id: int) -> void:
+	_ids.erase(_nodes.get(id))
 	_nodes.erase(id)
+	_states.erase(id)
 	_tracks.erase(id)
 	if _dyn.has(id):
 		_dyn.erase(id)
@@ -184,17 +207,25 @@ func _hello() -> void:
 	ids.sort()
 	for id in ids:
 		list.append([id, _dyn[id][0], _dyn[id][1]])
-	_welcome.rpc_id(peer, list)
+	_welcome.rpc_id(peer, list, _states)
 	_ready_peers[peer] = true
 	_full_next = true
 
 @rpc("authority", "call_remote", "reliable")
-func _welcome(list: Array) -> void:
+func _welcome(list: Array, states: Dictionary) -> void:
 	if _welcomed:
 		return
 	_welcomed = true
 	for e in list:
 		_create(e[0], e[1], e[2])
+	for id in states:
+		_state(id, states[id])
+
+@rpc("authority", "call_remote", "reliable")
+func _state(id: int, data: Dictionary) -> void:
+	var node: Node = _nodes.get(id)
+	if node != null and node.has_method("net_state"):
+		node.net_state(data)
 
 @rpc("authority", "call_remote", "reliable")
 func _spawn(id: int, kind: String, params: Dictionary) -> void:
@@ -221,6 +252,7 @@ func _action(action: StringName) -> void:
 	match action:
 		&"flop": k.flop()
 		&"laugh": k.laugh()
+		&"use": k.use()
 		_: player_action.emit(peer, action)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
@@ -263,6 +295,8 @@ func _write_snapshot(full: bool) -> PackedByteArray:
 	var count := 0
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
+		if not node is PhysicsBody3D:
+			continue   # не тело (например, лента): его положение вычисляется, а не передаётся
 		var k := node as Kombez
 		if k == null:
 			var rb := node as RigidBody3D

@@ -1,0 +1,181 @@
+extends RigidBody3D
+## Рулон изоленты — главный инструмент Бюро.
+## Возьми в руку, поднеси к чему-нибудь и нажми «использовать» (E): конец ленты прилипнет.
+## Донеси рулон до второго предмета (или стены) и нажми ещё раз — лента натянется между ними.
+## Нажал в пустоту или отошёл слишком далеко — конец отрывается. Рулон не бесконечный.
+
+const Tape := preload("res://physics/tape.gd")
+
+const LENGTH := 15.0           ## метров ленты в новом рулоне
+const MAX_SPAN := 6.0          ## дальше одним куском не тянется
+const REACH := 0.7             ## на таком расстоянии от рулона лента «достаёт» до поверхности
+const MIN_PIECE := 0.3         ## меньше на один кусок не тратится
+const R_FULL := 0.115
+const R_CORE := 0.06
+
+var left := LENGTH
+var puppet := false
+var end_on := false            ## конец ленты уже прилеплен, тянем ко второму предмету
+var end_id := 0                ## к чему: номер тела в NetWorld, 0 — неподвижный мир
+var end_local := Vector3.ZERO
+var end_normal := Vector3.UP
+
+var _world: Node
+var _strip: MeshInstance3D
+var _patch: MeshInstance3D
+var _ring: MeshInstance3D
+
+static func create(_params: Dictionary) -> RigidBody3D:
+	return load("res://tools/tape_roll.gd").new()
+
+func set_puppet(v: bool) -> void:
+	puppet = v
+	freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	freeze = v
+
+func _ready() -> void:
+	add_to_group("tape_roll")
+	_world = get_tree().get_first_node_in_group("net_world")
+	mass = 0.6
+	collision_layer = 2
+	collision_mask = 1 | 2 | 4 | 8
+	continuous_cd = true
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.8
+	physics_material_override = pm
+	var cs := CollisionShape3D.new()
+	var sh := CylinderShape3D.new()
+	sh.radius = R_FULL
+	sh.height = 0.07
+	cs.shape = sh
+	add_child(cs)
+	_ring = _cyl(1.0, 0.06, Tape.COLOR, 0.45)
+	_cyl(R_CORE, 0.066, Color("c9a26b"), 0.9)
+	_cyl(R_CORE - 0.012, 0.07, Color("3a2f25"), 0.9)
+	_strip = Tape.make_strip(self)
+	_patch = Tape.make_strip(self)
+	_refresh()
+
+func _cyl(radius: float, height: float, color: Color, rough: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = radius
+	cm.bottom_radius = radius
+	cm.height = height
+	cm.radial_segments = 24
+	mi.mesh = cm
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = rough
+	mi.material_override = m
+	add_child(mi)
+	return mi
+
+## Сколько ленты осталось — видно по толщине рулона.
+func _refresh() -> void:
+	var r := lerpf(R_CORE + 0.008, R_FULL, clampf(left / LENGTH, 0.0, 1.0))
+	_ring.scale = Vector3(r, 1.0, r)
+	_ring.visible = left > 0.05
+
+## Инструментом пользуются: user — Комбез, hand — рука, которая держит рулон. Только хост.
+func use_tool(user: Kombez, hand: Node3D) -> void:
+	if puppet or _world == null or left < 0.05:
+		return
+	var hit := _find_surface(user, hand)
+	if hit.is_empty():
+		if end_on:   # нажали в пустоту — конец оторвали
+			end_on = false
+			_sync()
+		return
+	var body: Node3D = hit["collider"]
+	var id: int = _world.id_of(body)
+	if id == 0 and not body is StaticBody3D:
+		return   # что-то, чего нет в общем мире (чужая рука и т.п.)
+	var point: Vector3 = hit["position"]
+	var normal: Vector3 = hit["normal"]
+	var local := point
+	var local_n := normal
+	if id != 0:
+		local = body.global_transform.affine_inverse() * point
+		local_n = body.global_basis.inverse() * normal
+	if not end_on:
+		end_on = true
+		end_id = id
+		end_local = local
+		end_normal = local_n
+	else:
+		if id == end_id:
+			return   # оба конца на одном и том же — так ничего не скрепить
+		var from: Vector3 = Tape.anchor(_end_body(), end_local, end_normal, false)[0]
+		var span := from.distance_to(point)
+		_world.spawn("tape", {"a": end_id, "la": end_local, "na": end_normal,
+			"b": id, "lb": local, "nb": local_n, "rest": maxf(span, 0.05)})
+		left = maxf(left - maxf(span, MIN_PIECE), 0.0)
+		end_on = false
+	_sync()
+
+func _end_body() -> Node3D:
+	if end_id == 0 or _world == null:
+		return null
+	var n: Node3D = _world.node_of(end_id)
+	return n if is_instance_valid(n) else null
+
+## Ближайшая поверхность, до которой дотягивается рулон: сначала по направлению руки,
+## потом — просто то, во что рулон упёрт.
+func _find_surface(user: Kombez, hand: Node3D) -> Dictionary:
+	var space := get_world_3d().direct_space_state
+	var exclude: Array[RID] = [get_rid(), user.get_rid(), user.hand_l.get_rid(), user.hand_r.get_rid()]
+	var from: Vector3 = user.shoulder_global(hand.side)
+	var dir := global_position - from
+	dir = dir.normalized() if dir.length() > 0.05 else -user.global_basis.z
+	var q := PhysicsRayQueryParameters3D.create(global_position - dir * 0.2, global_position + dir * REACH, 1 | 2 | 4)
+	q.exclude = exclude
+	var hit := space.intersect_ray(q)
+	if not hit.is_empty():
+		return hit
+	var sq := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = 0.45
+	sq.shape = sph
+	sq.transform = Transform3D(Basis.IDENTITY, global_position)
+	sq.collision_mask = 1 | 2 | 4
+	sq.exclude = exclude
+	var rest := space.get_rest_info(sq)
+	if rest.is_empty():
+		return {}
+	return {"collider": instance_from_id(rest["collider_id"]), "position": rest["point"], "normal": rest["normal"]}
+
+func _sync() -> void:
+	_refresh()
+	_world.sync_state(self, {"left": left, "on": end_on, "id": end_id, "p": end_local, "n": end_normal})
+
+## Состояние от хоста (у клиентов).
+func net_state(d: Dictionary) -> void:
+	left = float(d.get("left", left))
+	end_on = bool(d.get("on", false))
+	end_id = int(d.get("id", 0))
+	end_local = d.get("p", Vector3.ZERO)
+	end_normal = d.get("n", Vector3.UP)
+	_refresh()
+
+func _physics_process(_dt: float) -> void:
+	if puppet or not end_on:
+		return
+	if end_id != 0 and _end_body() == null:
+		end_on = false
+		_sync()
+		return
+	var from: Vector3 = Tape.anchor(_end_body(), end_local, end_normal, false)[0]
+	if from.distance_to(global_position) > minf(MAX_SPAN, left):
+		end_on = false   # ленты не хватило — конец оторвался
+		_sync()
+
+func _process(_dt: float) -> void:
+	var body := _end_body()
+	if not end_on or (end_id != 0 and body == null):
+		_strip.visible = false
+		_patch.visible = false
+		return
+	var e := Tape.anchor(body, end_local, end_normal, true)
+	Tape.place_strip(_strip, e[0], get_global_transform_interpolated().origin)
+	Tape.place_patch(_patch, e[0], e[1])

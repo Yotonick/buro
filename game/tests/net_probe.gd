@@ -4,6 +4,9 @@ extends Node
 ##   --walk=A-B          свой персонаж идёт вперёд с A по B секунду на уровне
 ##   --grab=A-B          свой персонаж в это время тянет обе руки вперёд-вниз
 ##   --ko=Имя@T          хост на T-й секунде уровня отправляет игрока в нокаут
+##   --use=T             свой персонаж на T-й секунде уровня жмёт «использовать» (E)
+##   --tape=T            хост на T-й секунде связывает лентой два ящика по 14 кг
+##   --give=Имя          хост кладёт рулон изоленты в левую руку игрока, как только тот её поднимет
 ##   --bad-link=З,Р,П    плохая связь: задержка З с, разброс Р с, потери П (0..1) для входящих снимков
 ##   --probe-report=T    на T-й секунде от запуска печатает состояние мира (строка PROBE)
 
@@ -12,6 +15,10 @@ var _level: Node
 var _me: Kombez
 var _t := 0.0
 var _ko_done := false
+var _use_done := false
+var _tape_done := false
+var _give_done := false
+var _give_t := 0.0
 var _prev := {}      ## имя -> позиция на прошлом тике
 var _steps := {}     ## имя -> [тиков в движении, из них рывков] (плавность картинки)
 
@@ -34,6 +41,7 @@ func _physics_process(dt: float) -> void:
 		_level = scene
 		_t = 0.0
 		_me = null
+		_use_done = false
 	_t += dt
 	if _me == null and is_instance_valid(_level.player):
 		_me = _level.player
@@ -44,6 +52,11 @@ func _physics_process(dt: float) -> void:
 		_me.in_grab_l = grab
 		_me.in_grab_r = grab
 		_me.in_aim_pitch = -0.75 if grab else 0.0
+		if args.has("use") and not _use_done and _t >= float(args["use"]):
+			_use_done = true
+			_me.use()
+	if Net.is_host():
+		_host_tape(dt)
 	for k in get_tree().get_nodes_in_group("kombez"):
 		if k.peer_id <= 0:
 			continue
@@ -62,6 +75,24 @@ func _physics_process(dt: float) -> void:
 					k.knock_out()
 					print("KO_DONE helmets=", get_tree().get_nodes_in_group("helmet").size())
 
+func _host_tape(dt: float) -> void:
+	var w: Node = _level.world
+	if args.has("tape") and not _tape_done and _t >= float(args["tape"]):
+		_tape_done = true
+		var boxes := _level.get_children().filter(func(n): return n is RigidBody3D and n.mass == 14.0)
+		w.spawn("tape", {"a": w.id_of(boxes[0]), "la": Vector3(0, 0.35, 0), "na": Vector3.UP,
+			"b": w.id_of(boxes[1]), "lb": Vector3(0, 0.35, 0), "nb": Vector3.UP, "rest": 1.7})
+	if args.has("give") and not _give_done:
+		for k in get_tree().get_nodes_in_group("kombez"):
+			if k.player_name != str(args["give"]):
+				continue
+			_give_t = _give_t + dt if k.hand_l.active else 0.0
+			if _give_t > 0.6:
+				_give_done = true
+				var roll: RigidBody3D = get_tree().get_nodes_in_group("tape_roll")[1]
+				roll.global_position = k.hand_l.global_position
+				roll.linear_velocity = Vector3.ZERO
+
 func _in_window(key: String) -> bool:
 	if not args.has(key):
 		return false
@@ -72,7 +103,7 @@ static func _p(v: Vector3) -> Array:
 	return [snappedf(v.x, 0.01), snappedf(v.y, 0.01), snappedf(v.z, 0.01)]
 
 func _report() -> void:
-	var out := {"steps": _steps, "scene": "", "players": {}, "dummies": [], "helmets": [], "bodies": []}
+	var out := {"steps": _steps, "scene": "", "players": {}, "dummies": [], "helmets": [], "bodies": [], "tapes": [], "rolls": []}
 	var scene := get_tree().current_scene
 	if scene != null:
 		out["scene"] = scene.scene_file_path
@@ -85,6 +116,10 @@ func _report() -> void:
 			out["dummies"].append(info)
 	for h in get_tree().get_nodes_in_group("helmet"):
 		out["helmets"].append(_p(h.global_position))
+	for t in get_tree().get_nodes_in_group("tape"):
+		out["tapes"].append([t.a_id, t.b_id, snappedf(t.rest, 0.01)])
+	for r in get_tree().get_nodes_in_group("tape_roll"):
+		out["rolls"].append([snappedf(r.left, 0.01), r.end_on, r.end_id])
 	if scene != null and "world" in scene:
 		var ids: Array = scene.world._nodes.keys()
 		ids.sort()

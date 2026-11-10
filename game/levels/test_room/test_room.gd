@@ -14,7 +14,7 @@ func spawn_point(slot: int) -> Vector3:
 func _build() -> void:
 	_build_world()
 	_build_playthings()
-	hint = "WASD — идти   ·   Пробел — прыжок   ·   ЛКМ / ПКМ — левая / правая рука (держи)   ·   мышь вверх-вниз — поднять-опустить руки\nF — упасть   ·   T — ржать   ·   R — вернуться на старт   ·   Esc — пауза"
+	hint = "WASD — идти   ·   Пробел — прыжок   ·   ЛКМ / ПКМ — левая / правая рука (держи)   ·   мышь вверх-вниз — поднять-опустить руки\nE — мотать изоленту (рулон в руке: раз — прилепил конец, второй раз — примотал)   ·   F — упасть   ·   T — ржать   ·   R — вернуться на старт   ·   Esc — пауза"
 
 func _tick(dt: float) -> void:
 	carousel.rotate_y(1.5 * dt)
@@ -87,6 +87,14 @@ func _build_playthings() -> void:
 	for i in 3:
 		Kit.prop_ball(self, Vector3(3.0 + i * 0.8, 0.4, 9.0), 0.3, 3.0, [Color("d85a30"), Color("1d9e75"), Color("ef9f27")][i])
 	Kit.prop_cylinder(self, Vector3(8, 0.46, 8), 0.35, 0.9, 18.0, Color("2f6f9f"))
+
+	# стол с изолентой: главный инструмент Бюро
+	Kit.block(self, Vector3(-4.5, 0.4, 5.0), Vector3(2.2, 0.8, 0.8), Kit.mat(Color("6b4f34")))
+	for i in 3:
+		var roll: RigidBody3D = TapeRoll.create({})
+		roll.position = Vector3(-5.2 + i * 0.7, 0.86, 5.0)
+		add_child(roll)
+	Kit.sign(self, Vector3(-4.5, 1.7, 5.0), "ИЗОЛЕНТА\nвозьми и жми E", 0.0, 48)
 
 	# груша для битья: висит на шарнире, раскачай и получи
 	var steel := Kit.mat(Color("5b6570"), 0.5)

@@ -10,13 +10,15 @@ PORT=27992
 g() { local log=$1; shift; "$GODOT" --headless --path "$DIR" -- --probe --port=$PORT ${BAD_LINK:+--bad-link=$BAD_LINK} "$@" > "$OUT/$log.log" 2>&1 & }
 # Вася идёт вперёд и толкает ящики руками, Петю хост отправляет в нокаут (слетает каска),
 # хост сам тоже идёт вперёд. Лена подключается на 7-й секунде.
-g host  --host --name=Хост --autostart=3 --walk=1-2.5 --ko=Петя@2 --probe-report=16 --quit-after=18
+# Хост на 3-й секунде связывает лентой два ящика (Лена увидит это, уже войдя), а Лене,
+# когда она поднимет руки, кладёт в руку рулон — она жмёт E и лепит конец ленты к полу.
+g host  --host --name=Хост --autostart=3 --walk=1-2.5 --ko=Петя@2 --tape=3 --give=Лена --probe-report=16 --quit-after=18
 sleep 1.5
 g vasya --join=127.0.0.1 --name=Вася --walk=1-3 --grab=1-3 --probe-report=14.5 --quit-after=16
 sleep 0.4
 g petya --join=127.0.0.1 --name=Петя --probe-report=14.1 --quit-after=16
 sleep 5
-g lena  --join=127.0.0.1 --name=Лена --probe-report=9.1 --quit-after=11
+g lena  --join=127.0.0.1 --name=Лена --grab=0.5-5 --use=3 --probe-report=9.1 --quit-after=11
 wait
 echo "--- логи: $OUT"
 grep -h -E "KO_DONE|SESSION_ENDED|NET_ERROR|ERROR|SCRIPT" "$OUT"/*.log
@@ -55,6 +57,8 @@ if len(rep) == 4:
         check(same and not bad, "%s видит тех же игроков там же, где хост %s" % (name, bad if bad else ""))
         ok = len(r["bodies"]) == len(h["bodies"]) and all(near(a, b) for a, b in zip(h["bodies"], r["bodies"]))
         check(ok, "%s: все %d предметов и стажёры там же, где у хоста" % (name, len(h["bodies"])))
+        check(len(h["tapes"]) == 1 and r["tapes"] == h["tapes"], "%s: лента между ящиками та же, что у хоста %s" % (name, r["tapes"]))
+        check(r["rolls"] == h["rolls"], "%s: рулоны в том же состоянии, что у хоста %s" % (name, r["rolls"]))
         ok = len(r["helmets"]) == len(h["helmets"]) and all(near(a, b) for a, b in zip(sorted(h["helmets"]), sorted(r["helmets"])))
         check(ok, "%s: слетевшие каски совпадают с хостом (%d)" % (name, len(h["helmets"])))
     # плавность: шаг идущего персонажа за тик должен быть ровным (4.2 м/с / 60 = 0.07 м);
@@ -62,6 +66,8 @@ if len(rep) == 4:
     for who, whom in (("petya", "Вася"), ("vasya", "Вася"), ("vasya", "Хост")):
         st = rep[who]["steps"].get(whom)
         check(st is not None and st[0] > 40 and st[1] <= st[0] * 0.05, "%s видит, как идёт %s, без рывков: %s" % (who, whom, st))
+    used = [x for x in h["rolls"] if x[1]]
+    check(len(used) == 1 and used[0][2] == 0, "Лена (клиент) нажала E — конец ленты прилип к полу: %s" % h["rolls"])
     logs = "".join(open(f, encoding="utf-8", errors="replace").read() for f in glob.glob(out + "/*.log"))
     check("KO_DONE helmets=1" in logs, "нокаут Пети сработал, каска слетела")
     helmets_total = len(h["helmets"]) + sum(1 for p in h["players"].values() if p["helmet"])
