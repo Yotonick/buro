@@ -24,7 +24,7 @@ _Обновлено: 2026-11-10_
 - Облачная Linux-машина: 2 ядра, 7 ГБ ОЗУ. Рабочая папка не переживает чат.
 - Доступно: git-чтение публичных репозиториев GitHub, apt, pip, npm. Недоступно: релизы GitHub, godotengine.org, kenney.nl.
 - **Как получить Godot в новом чате (1 минута вместо часа сборки):**
-  `git fetch origin toolchain && git show origin/toolchain:godot-4.7.2-linux-editor.xz | xz -d > /tmp/godot && chmod +x /tmp/godot`
+  `git fetch --depth 1 origin toolchain:refs/remotes/origin/toolchain && git show origin/toolchain:godot-4.7.2-linux-editor.xz | xz -d > /tmp/godot && chmod +x /tmp/godot`
 - Если пересобирать: `tools/build_godot.sh` (~45 мин; прерванная сборка scons начинается заново — запускать и дожидаться в одном ходе).
 - Скриншоты: `xvfb-run -a -s "-screen 0 1280x720x24" godot --path game --rendering-driver opengl3 --write-movie /tmp/shot/f.png --fixed-fps 5 --quit-after 6` (нужен apt-пакет xvfb).
 - Быстрый запуск для тестов: `godot --path game -- --host --name=X` / `-- --join=IP --name=Y` (+ `--port`, `--report-after`, `--quit-after`).
