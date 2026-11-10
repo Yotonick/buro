@@ -69,7 +69,6 @@ func _ready() -> void:
 	var mm := StandardMaterial3D.new()
 	mm.albedo_color = Color("ffe14a")
 	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mm.no_depth_test = true
 	_mark.material_override = mm
 	_mark.top_level = true
 	_mark.visible = false
@@ -263,7 +262,12 @@ func _update_mark() -> void:
 	var hit := _find_surface(k, null)
 	if hit.is_empty():
 		return
+	# пока конец не прилеплен, пол и стены не подсвечиваем — иначе колечко маячит под ногами всё время
+	if not end_on and _world.id_of(hit["collider"]) == 0:
+		return
+	if end_on and _world.id_of(hit["collider"]) == end_id:
+		return   # на тот же предмет второй конец не клеится
 	var n: Vector3 = hit["normal"]
 	var up := Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT
-	_mark.global_transform = Transform3D(Basis.looking_at(n, up) * Basis(Vector3.RIGHT, -PI / 2), (hit["position"] as Vector3) + n * 0.01)
+	_mark.global_transform = Transform3D(Basis.looking_at(n, up) * Basis(Vector3.RIGHT, -PI / 2), (hit["position"] as Vector3) + n * 0.015)
 	_mark.visible = true
