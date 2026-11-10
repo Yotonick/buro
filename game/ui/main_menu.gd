@@ -51,8 +51,9 @@ func _ready() -> void:
 
 	_status = Style.label("", 18, Style.DANGER)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.custom_minimum_size = Vector2(0, 56)
+	_status.custom_minimum_size = Vector2(0, 40)
 	box.add_child(_status)
+	box.add_child(_button("Полигон (один, без сети)", func(): Game.open_playground()))
 	box.add_child(_button("Выход", func(): get_tree().quit()))
 
 	var ver := Style.label("v" + str(ProjectSettings.get_setting("application/config/version")), 14, Style.MUTED)

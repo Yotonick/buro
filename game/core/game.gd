@@ -1,10 +1,11 @@
 extends Node
 ## Поток игры: меню <-> лобби. Также разбирает аргументы командной строки
 ## (быстрый запуск и автотесты): -- --host | --join=IP [--port=N] [--name=X]
-## [--report-after=СЕК] [--quit-after=СЕК]
+## [--report-after=СЕК] [--quit-after=СЕК] | --playground
 
 const MENU := "res://ui/main_menu.tscn"
 const LOBBY := "res://ui/lobby.tscn"
+const PLAYGROUND := "res://levels/test_room/test_room.tscn"
 
 ## Сообщение, которое меню покажет при следующем открытии (причина разрыва).
 var pending_message := ""
@@ -21,6 +22,14 @@ func _on_session_ended(reason: String) -> void:
 	pending_message = reason
 	get_tree().change_scene_to_file(MENU)
 
+## Полигон: одиночная тестовая комната.
+func open_playground() -> void:
+	get_tree().change_scene_to_file(PLAYGROUND)
+
+func to_menu() -> void:
+	Net.leave()
+	get_tree().change_scene_to_file(MENU)
+
 func _apply_cmdline() -> void:
 	var args := {}
 	for a in OS.get_cmdline_user_args():
@@ -28,6 +37,8 @@ func _apply_cmdline() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
 	if args.is_empty():
 		return
+	if args.has("playground"):
+		open_playground()
 	var player_name := str(args.get("name", Settings.player_name))
 	var port := int(args.get("port", Settings.port))
 	var err := ""
