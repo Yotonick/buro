@@ -10,6 +10,8 @@ extends RigidBody3D
 
 signal knocked_out
 signal recovered
+## «Кукла» (персонаж на клиенте) сама ничего не решает — просит хост.
+signal action_requested(action: StringName)
 
 enum State { ACTIVE, KO }
 
@@ -51,6 +53,9 @@ var in_aim_yaw := 0.0
 var in_aim_pitch := 0.0
 
 # --- состояние ---
+var peer_id := 0                 ## чей это персонаж в сети (0 — ничей: стажёр)
+var player_name := ""
+var puppet := false              ## true на клиенте: физику считает хост, здесь только картинка
 var state := State.ACTIVE
 var suit_color := Color("378add")
 var helmet_color := Color("f2c230")
@@ -76,6 +81,8 @@ var _ground_vel := Vector3.ZERO
 var _ground_body: Object
 var _ground_point := Vector3.ZERO
 var _prev_vy := 0.0
+var _net_velocity := Vector3.ZERO
+var _net_effort := 0.0
 
 func _ready() -> void:
 	add_to_group("kombez")
@@ -150,10 +157,14 @@ func is_holding() -> bool:
 	return hand_l.held != null or hand_r.held != null
 
 func effort() -> float:
+	if puppet:
+		return _net_effort
 	return maxf(hand_l.effort, hand_r.effort)
 
 ## Нокаут: мышцы отключаются на duration секунд.
 func knock_out(duration := KO_TIME, drop_helmet := true) -> void:
+	if puppet:
+		return
 	if state == State.KO:
 		_ko_timer = maxf(_ko_timer, duration)
 		return
@@ -169,11 +180,17 @@ func knock_out(duration := KO_TIME, drop_helmet := true) -> void:
 
 ## Упасть нарочно (каска остаётся).
 func flop() -> void:
+	if puppet:
+		action_requested.emit(&"flop")
+		return
 	if state == State.ACTIVE:
 		knock_out(1.1, false)
 		apply_central_impulse(Basis(Vector3.UP, _face_yaw) * Vector3(0, 0.5, -2.0) * mass)
 
 func laugh() -> void:
+	if puppet:
+		action_requested.emit(&"laugh")
+		return
 	if state == State.ACTIVE:
 		laugh_time = 1.6
 
@@ -194,10 +211,41 @@ func teleport(pos: Vector3, yaw := 0.0) -> void:
 	hand_r.snap_to_rest()
 	reset_physics_interpolation()
 
+# ---------- сеть ----------
+
+## Режим «куклы»: тело и руки не считают физику, их двигает NetWorld по снимкам хоста.
+func set_puppet(v: bool) -> void:
+	puppet = v
+	freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	freeze = v
+	hand_l.set_puppet(v)
+	hand_r.set_puppet(v)
+
+## Скорость для картинки (у куклы настоящей скорости нет).
+func visual_velocity() -> Vector3:
+	return _net_velocity if puppet else linear_velocity
+
+## Состояние для снимка: нокаут, на земле, каска, смех, усилие.
+func net_flags() -> int:
+	return int(state == State.KO) | int(grounded) << 1 | int(has_helmet) << 2 \
+		| int(laugh_time > 0.0) << 3 | int(effort() > 0.5) << 4
+
+func apply_net(vel: Vector3, flags: int, gdist: float) -> void:
+	_net_velocity = vel
+	state = State.KO if flags & 1 else State.ACTIVE
+	grounded = flags & 2 != 0
+	ground_dist = gdist
+	laugh_time = 1.0 if flags & 8 else 0.0
+	_net_effort = 1.0 if flags & 16 else 0.0
+	var helmet := flags & 4 != 0
+	if helmet != has_helmet:
+		has_helmet = helmet
+		visual.refresh_helmet()
+
 # ---------- физика ----------
 
 func _integrate_forces(s: PhysicsDirectBodyState3D) -> void:
-	if state == State.KO or _immune > 0.0:
+	if puppet or state == State.KO or _immune > 0.0:
 		return
 	for i in s.get_contact_count():
 		var imp := s.get_contact_impulse(i).length()
@@ -211,6 +259,10 @@ func _integrate_forces(s: PhysicsDirectBodyState3D) -> void:
 			_pending_ko = true
 
 func _physics_process(dt: float) -> void:
+	if puppet:
+		air_time = 0.0 if grounded else air_time + dt
+		visual.tick(dt)
+		return
 	_immune = maxf(_immune - dt, 0.0)
 	laugh_time = maxf(laugh_time - dt, 0.0)
 	_update_ground()
@@ -353,10 +405,15 @@ func _recover() -> void:
 func _drop_helmet() -> void:
 	has_helmet = false
 	visual.refresh_helmet()
-	var prop: RigidBody3D = HelmetProp.new()
-	prop.color = helmet_color
-	get_parent().add_child(prop)
-	prop.global_transform = Transform3D(global_basis.orthonormalized(), head_top_global() - global_basis.y * 0.08)
+	var xf := Transform3D(global_basis.orthonormalized(), head_top_global() - global_basis.y * 0.08)
+	var world := get_tree().get_first_node_in_group("net_world")
+	var prop: RigidBody3D
+	if world != null:
+		prop = world.spawn("helmet", {"color": helmet_color, "xform": xf})
+	else:
+		prop = HelmetProp.create({"color": helmet_color})
+		get_parent().add_child(prop)
+		prop.global_transform = xf
 	prop.linear_velocity = linear_velocity + Vector3(randf_range(-1.5, 1.5), 3.5, randf_range(-1.5, 1.5))
 	prop.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-6, 6), randf_range(-6, 6))
 	prop.add_collision_exception_with(self)

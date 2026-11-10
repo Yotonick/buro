@@ -1,50 +1,23 @@
-extends Node3D
+extends "res://levels/level_base.gd"
 ## Полигон: комната для обкатки Комбеза — ходьба, прыжки, хват, лазание, нокауты.
 ## Не игровая локация, а испытательный стенд студии.
 
-const Kit := preload("res://levels/level_kit.gd")
-const CameraScript := preload("res://characters/player_camera.gd")
-const ControllerScript := preload("res://characters/player_controller.gd")
-const HudScript := preload("res://ui/game_hud.gd")
 const FLOOR_SHADER := preload("res://levels/test_room/floor.gdshader")
 
-const SPAWN := Vector3(0, 1.0, 7)
-
-var player: Kombez
-var camera: Node3D
-var controller: Node
-var hud: CanvasLayer
 var carousel: AnimatableBody3D
 var bag: RigidBody3D
 var dummies: Array[Kombez] = []
 
-func _ready() -> void:
+func spawn_point(slot: int) -> Vector3:
+	return Vector3((slot - 1.5) * 1.6 if Net.in_session() else 0.0, 1.0, 7)
+
+func _build() -> void:
 	_build_world()
 	_build_playthings()
-	player = _spawn_kombez(SPAWN, Net.PLAYER_COLORS[0])
-	camera = CameraScript.new()
-	add_child(camera)
-	camera.target = player
-	camera.snap()
-	controller = ControllerScript.new()
-	controller.kombez = player
-	controller.camera = camera
-	add_child(controller)
-	hud = HudScript.new()
-	add_child(hud)
-	hud.set_hint("WASD — идти   ·   Пробел — прыжок   ·   ЛКМ / ПКМ — левая / правая рука (держи)   ·   мышь вверх-вниз — поднять-опустить руки\nF — упасть   ·   T — ржать   ·   R — вернуться на старт   ·   Esc — пауза")
+	hint = "WASD — идти   ·   Пробел — прыжок   ·   ЛКМ / ПКМ — левая / правая рука (держи)   ·   мышь вверх-вниз — поднять-опустить руки\nF — упасть   ·   T — ржать   ·   R — вернуться на старт   ·   Esc — пауза"
 
-func _spawn_kombez(pos: Vector3, color: Color) -> Kombez:
-	var k := Kombez.new()
-	k.suit_color = color
-	k.position = pos
-	add_child(k)
-	return k
-
-func _physics_process(dt: float) -> void:
+func _tick(dt: float) -> void:
 	carousel.rotate_y(1.5 * dt)
-	if Input.is_action_just_pressed("respawn") or player.global_position.y < -15.0:
-		player.teleport(SPAWN)
 	for d in dummies:
 		if d.global_position.y < -15.0:
 			d.teleport(Vector3(4, 1, 2))
@@ -139,8 +112,11 @@ func _build_playthings() -> void:
 	# стажёры: их можно таскать за что попало и швырять
 	var colors := [Color("9aa3ab"), Net.PLAYER_COLORS[2]]
 	for i in 2:
-		var d := _spawn_kombez(Vector3(3.0 + i * 1.6, 1.0, 1.0), colors[i])
+		var d := Kombez.new()
+		d.suit_color = colors[i]
+		d.position = Vector3(3.0 + i * 1.6, 1.0, 1.0)
 		d.rotation.y = PI
+		add_child(d)
 		dummies.append(d)
 	Kit.sign(self, Vector3(3.8, 2.3, 1.0), "Стажёры", PI, 40)
 

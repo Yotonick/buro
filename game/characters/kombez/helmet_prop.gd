@@ -5,8 +5,19 @@ extends RigidBody3D
 const KombezVisual := preload("res://characters/kombez/kombez_visual.gd")
 
 var color := Color("f2c230")
+var puppet := false
 var _age := 0.0
 var _exceptions_cleared := false
+
+static func create(params: Dictionary) -> RigidBody3D:
+	var h: RigidBody3D = load("res://characters/kombez/helmet_prop.gd").new()
+	h.color = params.get("color", h.color)
+	return h
+
+func set_puppet(v: bool) -> void:
+	puppet = v
+	freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	freeze = v
 
 func _ready() -> void:
 	add_to_group("helmet")
@@ -24,6 +35,8 @@ func _ready() -> void:
 	add_child(KombezVisual.build_helmet(color))
 
 func _physics_process(dt: float) -> void:
+	if puppet:
+		return
 	_age += dt
 	if _age < 1.0:
 		return

@@ -1,6 +1,6 @@
 extends Control
-## Лобби: список бригады и IP для друзей. Пока без игрового мира —
-## он появится на этапах 3–5.
+## Лобби: список бригады и IP для друзей. Хост нажимает «Начать смену» —
+## и вся бригада попадает на уровень.
 
 const Style := preload("res://ui/ui_style.gd")
 
@@ -30,6 +30,15 @@ func _ready() -> void:
 		var hint := Style.label(_host_hint(), 18, Style.MUTED)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(hint)
+
+	if Net.is_host():
+		var start := Button.new()
+		start.text = "Начать смену (полигон)"
+		start.pressed.connect(func(): Game.start_match())
+		box.add_child(start)
+		start.grab_focus()
+	else:
+		box.add_child(Style.label("Ждём, когда хост начнёт смену…", 18, Style.MUTED))
 
 	var leave := Button.new()
 	leave.text = "Закрыть игру" if Net.is_host() else "Выйти из бригады"

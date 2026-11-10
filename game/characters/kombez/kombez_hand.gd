@@ -17,6 +17,7 @@ var body: RigidBody3D        ## Kombez
 var side := 1.0
 var active := false
 var limp := false
+var puppet := false         ## на клиенте: руку двигает сеть
 var held: PhysicsBody3D
 var effort := 0.0            ## 0..1 — насколько рука напряжена (для лица)
 var _joint: PinJoint3D
@@ -60,6 +61,14 @@ func snap_to_rest() -> void:
 	linear_velocity = body.linear_velocity
 	reset_physics_interpolation()
 
+func set_puppet(v: bool) -> void:
+	puppet = v
+	freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	freeze = v
+	if v:
+		release()
+		collision_mask = 0
+
 func set_limp(v: bool) -> void:
 	limp = v
 	if v:
@@ -77,6 +86,8 @@ func release() -> void:
 	held = null
 
 func _physics_process(_dt: float) -> void:
+	if puppet:
+		return
 	if held != null and not is_instance_valid(held):
 		release()
 	var shoulder: Vector3 = body.shoulder_global(side)

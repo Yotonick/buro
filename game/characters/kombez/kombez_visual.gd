@@ -142,7 +142,7 @@ func tick(dt: float) -> void:
 		face = "ko"
 	elif body.laugh_time > 0.0:
 		face = "joy"
-	elif body.air_time > 0.55 or (not body.grounded and body.linear_velocity.y < -5.5):
+	elif body.air_time > 0.55 or (not body.grounded and body.visual_velocity().y < -5.5):
 		face = "panic"
 	elif body.effort() > 0.5:
 		face = "effort"
@@ -168,7 +168,7 @@ func tick(dt: float) -> void:
 		_stretch(_arms[i], a, b)
 
 	# ноги: шагают, когда идёт; болтаются в воздухе
-	var local_vel: Vector3 = body.global_basis.inverse() * body.linear_velocity
+	var local_vel: Vector3 = body.global_basis.inverse() * body.visual_velocity()
 	local_vel.y = 0.0
 	var speed := local_vel.length()
 	var walking: bool = body.grounded and not body.is_ko()

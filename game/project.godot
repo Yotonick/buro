@@ -4,7 +4,7 @@ config_version=5
 [application]
 
 config/name="Бюро Невозможного Ремонта"
-config/version="0.1.0"
+config/version="0.2.0"
 run/main_scene="res://ui/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
