@@ -253,6 +253,7 @@ func _action(action: StringName) -> void:
 		&"flop": k.flop()
 		&"laugh": k.laugh()
 		&"use": k.use()
+		&"drop": k.drop_tool()
 		_: player_action.emit(peer, action)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
@@ -266,6 +267,7 @@ func _player_input(move: Vector2, buttons: int, yaw: float, pitch: float) -> voi
 	k.in_jump = buttons & 1 != 0
 	k.in_grab_l = buttons & 2 != 0
 	k.in_grab_r = buttons & 4 != 0
+	k.in_crouch = buttons & 8 != 0
 	k.in_aim_yaw = wrapf(yaw, -PI, PI)
 	k.in_aim_pitch = clampf(pitch, -1.6, 1.6)
 
@@ -283,7 +285,7 @@ func _physics_process(_dt: float) -> void:
 		_apply_snapshots()
 		var k := local_kombez
 		if k != null and is_instance_valid(k):
-			var buttons := int(k.in_jump) | int(k.in_grab_l) << 1 | int(k.in_grab_r) << 2
+			var buttons := int(k.in_jump) | int(k.in_grab_l) << 1 | int(k.in_grab_r) << 2 | int(k.in_crouch) << 3
 			_player_input.rpc_id(1, k.in_move, buttons, k.in_aim_yaw, k.in_aim_pitch)
 
 # ---------- снимки: хост пишет ----------
@@ -300,7 +302,7 @@ func _write_snapshot(full: bool) -> PackedByteArray:
 		var k := node as Kombez
 		if k == null:
 			var rb := node as RigidBody3D
-			if rb != null and rb.sleeping and not full and (_tick + id) % REFRESH_TICKS != 0:
+			if rb != null and rb.sleeping and not rb.freeze and not full and (_tick + id) % REFRESH_TICKS != 0:
 				continue
 		b.put_u16(id)
 		b.put_u8(T_BODY if k == null else T_KOMBEZ)

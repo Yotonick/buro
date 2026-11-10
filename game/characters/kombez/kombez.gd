@@ -29,6 +29,10 @@ const BODY_MASS := 40.0
 const BODY_INERTIA := 4.0
 const RIDE_HEIGHT := 0.78        ## высота центра тела над землёй
 const RAY_LENGTH := 1.1
+const CROUCH_HEIGHT := 0.54      ## то же вприсядку (Ctrl): руки достают до пола
+const CROUCH_SPEED := 0.55       ## вприсядку ходим медленнее (доля от SPEED)
+const PICK_AIM := 3.0            ## с такого расстояния E цепляет инструмент на пояс, если смотреть на него
+const PICK_NEAR := 1.5           ## …или просто ближайший в таком радиусе
 const FLOAT_K := 22000.0         ## жёсткость «ног»
 const FLOAT_D := 1300.0
 const FLOAT_MAX := 4000.0
@@ -51,6 +55,7 @@ var in_grab_l := false
 var in_grab_r := false
 var in_aim_yaw := 0.0
 var in_aim_pitch := 0.0
+var in_crouch := false
 
 # --- состояние ---
 var peer_id := 0                 ## чей это персонаж в сети (0 — ничей: стажёр)
@@ -67,6 +72,7 @@ var laugh_time := 0.0
 var hand_l: RigidBody3D
 var hand_r: RigidBody3D
 var visual: Node3D
+var tool: Node3D                 ## инструмент на поясе (руки свободны); E — пустить в дело, Q — снять
 
 var _face_yaw := 0.0
 var _strength := 1.0             ## 0..1 — сила мышц (плавно возвращается после нокаута)
@@ -150,6 +156,20 @@ func hand_target(side: float, active: bool) -> Vector3:
 	var dir := Vector3(-side * 0.14, sin(pitch), -cos(pitch)).normalized()
 	return shoulder_global(side) + Basis(Vector3.UP, in_aim_yaw) * dir * 0.78
 
+## Точка на уровне глаз камеры и направление взгляда игрока — туда «целятся» инструменты с пояса.
+func aim_origin() -> Vector3:
+	return global_position + Vector3.UP * 0.7
+
+func aim_dir() -> Vector3:
+	return Basis.from_euler(Vector3(in_aim_pitch, in_aim_yaw, 0.0)) * Vector3.FORWARD
+
+## Где на теле висит инструмент с пояса.
+func belt_global() -> Transform3D:
+	return global_transform * Transform3D(Basis(Vector3.FORWARD, PI / 2), Vector3(0.41, -0.2, 0.02))
+
+func ride_height() -> float:
+	return CROUCH_HEIGHT if in_crouch else RIDE_HEIGHT
+
 func is_ko() -> bool:
 	return state == State.KO
 
@@ -201,9 +221,50 @@ func use() -> void:
 		return
 	if state != State.ACTIVE:
 		return
+	if tool != null and not is_instance_valid(tool):
+		tool = null
+	var used := false
 	for h in [hand_l, hand_r]:
 		if h.held != null and is_instance_valid(h.held) and h.held.has_method("use_tool"):
 			h.held.use_tool(self, h)
+			used = true
+	if used:
+		return
+	if tool != null:
+		tool.use_tool(self, null)
+		return
+	var found := _find_tool()
+	if found != null:
+		found.attach_to(self)
+
+## Снять инструмент с пояса и бросить перед собой (Q).
+func drop_tool() -> void:
+	if puppet:
+		action_requested.emit(&"drop")
+		return
+	if tool != null and is_instance_valid(tool):
+		tool.detach(true)
+	tool = null
+
+## Свободный инструмент, на который смотрит игрок, или ближайший рядом.
+func _find_tool() -> Node3D:
+	var q := PhysicsRayQueryParameters3D.create(aim_origin(), aim_origin() + aim_dir() * PICK_AIM, L_WORLD | L_PROP)
+	q.exclude = [get_rid(), hand_l.get_rid(), hand_r.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit.is_empty():
+		var c: Node3D = hit["collider"]
+		if c.is_in_group("tool") and c.holder == null:
+			return c
+	var best: Node3D = null
+	var best_d := PICK_NEAR
+	for t in get_tree().get_nodes_in_group("tool"):
+		if t.holder != null:
+			continue
+		var d: float = (t.global_position - (global_position + Vector3.DOWN * 0.3)).length()
+		if d < best_d:
+			best_d = d
+			best = t
+	return best
 
 func equip_helmet(color: Color) -> void:
 	has_helmet = true
@@ -307,7 +368,7 @@ func _update_ground() -> void:
 	_ground_point = hit["position"]
 	_ground_body = hit["collider"]
 	var was_grounded := grounded
-	grounded = ground_dist < RIDE_HEIGHT + 0.14
+	grounded = ground_dist < ride_height() + 0.14
 	var body := _ground_body as PhysicsBody3D
 	if body != null and not (body is StaticBody3D and not body is AnimatableBody3D):
 		var rid: RID = hit["rid"]
@@ -332,7 +393,7 @@ func _active(dt: float) -> void:
 	# «ноги»: пружина держит тело над землёй
 	if ground_dist < RAY_LENGTH and _float_off <= 0.0:
 		var rel_vy := linear_velocity.y - _ground_vel.y
-		var f := (RIDE_HEIGHT - ground_dist) * FLOAT_K * _strength - rel_vy * FLOAT_D
+		var f := (ride_height() - ground_dist) * FLOAT_K * _strength - rel_vy * FLOAT_D
 		f = clampf(f, 0.0, FLOAT_MAX)
 		apply_central_force(Vector3.UP * f)
 		_push_ground(Vector3.DOWN * f)
@@ -343,7 +404,7 @@ func _active(dt: float) -> void:
 	rel.y = 0.0
 	var on_feet := grounded and _float_off <= 0.0
 	if on_feet or move.length_squared() > 0.01:
-		var dv := move * SPEED - rel
+		var dv := move * SPEED * (CROUCH_SPEED if in_crouch and on_feet else 1.0) - rel
 		var force := (dv / dt * mass).limit_length(mass * (GROUND_ACCEL if on_feet else AIR_ACCEL))
 		force *= _strength
 		apply_central_force(force)

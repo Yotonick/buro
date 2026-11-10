@@ -22,6 +22,16 @@ func _ready() -> void:
 	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_root.add_child(_hint)
 
+	var dot := ColorRect.new()   # точка прицела: туда тянутся руки и клеится лента
+	dot.color = Color(1, 1, 1, 0.75)
+	dot.set_anchors_preset(Control.PRESET_CENTER)
+	dot.offset_left = -2
+	dot.offset_top = -2
+	dot.offset_right = 2
+	dot.offset_bottom = 2
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(dot)
+
 	_pause = ColorRect.new()
 	(_pause as ColorRect).color = Color(0.05, 0.1, 0.15, 0.7)
 	_pause.set_anchors_preset(Control.PRESET_FULL_RECT)

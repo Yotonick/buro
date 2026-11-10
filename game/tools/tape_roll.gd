@@ -8,6 +8,7 @@ const Tape := preload("res://physics/tape.gd")
 
 const LENGTH := 15.0           ## метров ленты в новом рулоне
 const MAX_SPAN := 6.0          ## дальше одним куском не тянется
+const AIM_REACH := 3.0       ## с пояса лента достаёт на столько по взгляду игрока
 const REACH := 0.7             ## на таком расстоянии от рулона лента «достаёт» до поверхности
 const MIN_PIECE := 0.3         ## меньше на один кусок не тратится
 const R_FULL := 0.115
@@ -19,11 +20,14 @@ var end_on := false            ## конец ленты уже прилепле�
 var end_id := 0                ## к чему: номер тела в NetWorld, 0 — неподвижный мир
 var end_local := Vector3.ZERO
 var end_normal := Vector3.UP
+var holder: Kombez             ## у кого рулон висит на поясе (только хост)
+var holder_id := 0             ## то же номером в NetWorld — знают все
 
 var _world: Node
 var _strip: MeshInstance3D
 var _patch: MeshInstance3D
 var _ring: MeshInstance3D
+var _mark: MeshInstance3D      ## подсказка «сюда прилипнет» — видит только тот, у кого рулон на поясе
 
 static func create(_params: Dictionary) -> RigidBody3D:
 	return load("res://tools/tape_roll.gd").new()
@@ -35,6 +39,7 @@ func set_puppet(v: bool) -> void:
 
 func _ready() -> void:
 	add_to_group("tape_roll")
+	add_to_group("tool")
 	_world = get_tree().get_first_node_in_group("net_world")
 	mass = 0.6
 	collision_layer = 2
@@ -54,7 +59,61 @@ func _ready() -> void:
 	_cyl(R_CORE - 0.012, 0.07, Color("3a2f25"), 0.9)
 	_strip = Tape.make_strip(self)
 	_patch = Tape.make_strip(self)
+	_mark = MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.05
+	tm.outer_radius = 0.075
+	tm.rings = 20
+	tm.ring_segments = 6
+	_mark.mesh = tm
+	var mm := StandardMaterial3D.new()
+	mm.albedo_color = Color("ffe14a")
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.no_depth_test = true
+	_mark.material_override = mm
+	_mark.top_level = true
+	_mark.visible = false
+	_mark.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	add_child(_mark)
 	_refresh()
+
+## Повесить на пояс: руки свободны, рулон ездит на боку. Только хост.
+func attach_to(k: Kombez) -> void:
+	if puppet or holder != null:
+		return
+	for other in get_tree().get_nodes_in_group("kombez"):
+		for h in [other.hand_l, other.hand_r]:
+			if h.held == self:
+				h.release()
+	holder = k
+	k.tool = self
+	holder_id = _world.id_of(k) if _world != null else 0
+	freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	freeze = true
+	collision_layer = 0
+	collision_mask = 0
+	global_transform = k.belt_global()
+	reset_physics_interpolation()
+	_sync()
+
+## Снять с пояса; toss — бросить вперёд.
+func detach(toss := false) -> void:
+	if holder_id == 0:
+		return
+	var k: Kombez = holder if is_instance_valid(holder) else null
+	holder = null
+	holder_id = 0
+	collision_layer = 2
+	collision_mask = 1 | 2 | 4 | 8
+	freeze = false
+	if k != null:
+		if k.tool == self:
+			k.tool = null
+		var fwd := Basis(Vector3.UP, k.in_aim_yaw) * Vector3.FORWARD
+		global_position = k.global_position + fwd * 0.6 + Vector3.UP * 0.25
+		linear_velocity = k.linear_velocity + (fwd * 2.2 + Vector3.UP * 1.8 if toss else Vector3.ZERO)
+		reset_physics_interpolation()
+	_sync()
 
 func _cyl(radius: float, height: float, color: Color, rough: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
@@ -125,6 +184,10 @@ func _end_body() -> Node3D:
 func _find_surface(user: Kombez, hand: Node3D) -> Dictionary:
 	var space := get_world_3d().direct_space_state
 	var exclude: Array[RID] = [get_rid(), user.get_rid(), user.hand_l.get_rid(), user.hand_r.get_rid()]
+	if hand == null:   # рулон на поясе: клеим туда, куда смотрит игрок
+		var aq := PhysicsRayQueryParameters3D.create(user.aim_origin(), user.aim_origin() + user.aim_dir() * AIM_REACH, 1 | 2 | 4)
+		aq.exclude = exclude
+		return space.intersect_ray(aq)
 	var from: Vector3 = user.shoulder_global(hand.side)
 	var dir := global_position - from
 	dir = dir.normalized() if dir.length() > 0.05 else -user.global_basis.z
@@ -147,7 +210,7 @@ func _find_surface(user: Kombez, hand: Node3D) -> Dictionary:
 
 func _sync() -> void:
 	_refresh()
-	_world.sync_state(self, {"left": left, "on": end_on, "id": end_id, "p": end_local, "n": end_normal})
+	_world.sync_state(self, {"left": left, "on": end_on, "id": end_id, "p": end_local, "n": end_normal, "who": holder_id})
 
 ## Состояние от хоста (у клиентов).
 func net_state(d: Dictionary) -> void:
@@ -156,10 +219,18 @@ func net_state(d: Dictionary) -> void:
 	end_id = int(d.get("id", 0))
 	end_local = d.get("p", Vector3.ZERO)
 	end_normal = d.get("n", Vector3.UP)
+	holder_id = int(d.get("who", 0))
 	_refresh()
 
 func _physics_process(_dt: float) -> void:
-	if puppet or not end_on:
+	if puppet:
+		return
+	if holder_id != 0:
+		if not is_instance_valid(holder):
+			detach()
+		else:
+			global_transform = holder.belt_global()
+	if not end_on:
 		return
 	if end_id != 0 and _end_body() == null:
 		end_on = false
@@ -171,6 +242,7 @@ func _physics_process(_dt: float) -> void:
 		_sync()
 
 func _process(_dt: float) -> void:
+	_update_mark()
 	var body := _end_body()
 	if not end_on or (end_id != 0 and body == null):
 		_strip.visible = false
@@ -179,3 +251,19 @@ func _process(_dt: float) -> void:
 	var e := Tape.anchor(body, end_local, end_normal, true)
 	Tape.place_strip(_strip, e[0], get_global_transform_interpolated().origin)
 	Tape.place_patch(_patch, e[0], e[1])
+
+## Жёлтое колечко там, куда прилипнет лента, — только у того, кто носит этот рулон.
+func _update_mark() -> void:
+	_mark.visible = false
+	if holder_id == 0 or _world == null or left < 0.05:
+		return
+	var k: Kombez = _world.local_kombez
+	if k == null or not is_instance_valid(k) or _world.node_of(holder_id) != k or k.is_ko():
+		return
+	var hit := _find_surface(k, null)
+	if hit.is_empty():
+		return
+	var n: Vector3 = hit["normal"]
+	var up := Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT
+	_mark.global_transform = Transform3D(Basis.looking_at(n, up) * Basis(Vector3.RIGHT, -PI / 2), (hit["position"] as Vector3) + n * 0.01)
+	_mark.visible = true

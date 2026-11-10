@@ -121,3 +121,51 @@ func _run() -> void:
 	roll.global_position = b.global_position + Vector3(0, 1.0, 2.0)
 	await _wait(0.2)
 	_check("отошёл дальше, чем осталось ленты, — конец оторвался", not roll.end_on)
+
+	# --- пояс: рулон берётся с пола без рук, клеит по взгляду ---
+	var r2: RigidBody3D = rolls[1]
+	var o2 := Vector3(15, 0, 3)
+	k.in_grab_l = false
+	k.in_aim_yaw = 0.0
+	k.in_aim_pitch = 0.0
+	k.teleport(o2 + Vector3(0, 0.9, 0))
+	r2.global_position = o2 + Vector3(0.3, 0.2, -0.9)
+	r2.linear_velocity = Vector3.ZERO
+	var d1 := _box(o2 + Vector3(0, 1.3, -2.0), 4.0)
+	var d2 := _box(o2 + Vector3(-2.0, 1.3, 0), 4.0)
+	d1.freeze = true
+	d2.freeze = true
+	await _wait(1.0)
+	k.use()
+	await _wait(0.3)
+	_check("E рядом с рулоном на полу — рулон на поясе, руки свободны", k.tool == r2 and r2.holder == k and not k.is_holding()
+		and r2.global_position.distance_to(k.global_position) < 0.7)
+	k.in_aim_pitch = -0.05
+	await _wait(0.1)
+	k.use()
+	await _wait(0.1)
+	_check("E с пояса — конец прилип туда, куда смотришь", r2.end_on and r2.end_id == w.id_of(d1), "к чему: %d (ящик %d)" % [r2.end_id, w.id_of(d1)])
+	k.in_aim_yaw = PI / 2
+	await _wait(0.1)
+	k.use()
+	await _wait(0.1)
+	_check("второй раз E — лента между двумя ящиками", _tapes().size() == 1 and not r2.end_on, "лент: %d" % _tapes().size())
+	k.drop_tool()
+	await _wait(1.0)
+	_check("Q — рулон снят с пояса и лежит на полу", k.tool == null and r2.holder == null and not r2.freeze and r2.global_position.y < 0.4,
+		"y=%.2f" % r2.global_position.y)
+
+	# --- присесть ---
+	k.teleport(Vector3(15, 0.9, -3))
+	await _wait(1.0)
+	var h_stand := k.global_position.y
+	k.in_crouch = true
+	k.in_aim_pitch = -1.25
+	k.in_grab_r = true
+	await _wait(1.0)
+	_check("Ctrl — присел, рука достаёт до пола", k.global_position.y < h_stand - 0.18 and k.hand_r.global_position.y < 0.2,
+		"тело %.2f -> %.2f, рука y=%.2f" % [h_stand, k.global_position.y, k.hand_r.global_position.y])
+	k.in_crouch = false
+	k.in_grab_r = false
+	await _wait(1.0)
+	_check("отпустил Ctrl — встал", absf(k.global_position.y - h_stand) < 0.05, "y=%.2f" % k.global_position.y)
