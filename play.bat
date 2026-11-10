@@ -10,11 +10,9 @@ if not exist "game\project.godot" goto nosetup
 
 echo Обновляю игру...
 git pull --ff-only origin main > logs\update_log.txt 2>&1
-if errorlevel 1 echo Обновить не получилось, запускаю то, что есть. Подробности: logs\update_log.txt
-"%GODOT%" --headless --path game --import > logs\import_log.txt 2>&1
-
-echo Запускаю...
-start "" "%GODOT%" --path game --log-file "%~dp0logs\game_log.txt" -- %*
+rem --- ВАЖНО: всё, что выше этой строки, менять нельзя (файл обновляет сам себя на ходу) ---
+if errorlevel 1 call tools\win\force_update.bat
+call tools\win\run.bat %*
 goto :eof
 
 :nogodot
