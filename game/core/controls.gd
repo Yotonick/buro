@@ -24,6 +24,7 @@ const ACTIONS := [
 	["laugh", "Ржать"],
 	["respawn", "Встать на место"],
 	["tablet", "Планшет"],
+	["view_toggle", "Вид: 1-е / 3-е лицо"],
 ]
 ## Действия, которые не переназначаются (Esc всегда выход в паузу и отмена).
 const FIXED := ["pause"]
@@ -41,6 +42,7 @@ const DEFAULTS := {
 	"laugh": ["key:%d" % KEY_T, ""],
 	"respawn": ["key:%d" % KEY_R, ""],
 	"tablet": ["key:%d" % KEY_TAB, ""],
+	"view_toggle": ["key:%d" % KEY_V, ""],
 	"pause": ["key:%d" % KEY_ESCAPE, ""],
 	"grab_left": ["mouse:%d" % MOUSE_BUTTON_LEFT, ""],
 	"grab_right": ["mouse:%d" % MOUSE_BUTTON_RIGHT, ""],

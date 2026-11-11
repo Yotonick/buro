@@ -169,9 +169,13 @@ func _run() -> void:
 	m._g.fps.select(1)
 	m._g.fps.item_selected.emit(1)
 	_check("ограничение 60 кадров", Engine.max_fps == 60)
-	m._g.fov[0].value = 80.0
+	m._g.fov_fp[0].value = 95.0
 	await _frames(1)
-	_check("поле зрения 80° — у камеры сразу", is_equal_approx(cam.camera.fov, 80.0), "%.1f" % cam.camera.fov)
+	_check("обзор 1-го лица 95° — у камеры сразу", cam.is_first_person() and is_equal_approx(cam.camera.fov, 95.0), "%.1f" % cam.camera.fov)
+	m._g.fov[0].value = 80.0
+	cam.set_zoom(cam.DISTANCE, true)
+	await _frames(2)
+	_check("обзор 3-го лица 80° — после V", not cam.is_first_person() and is_equal_approx(cam.camera.fov, 80.0), "%.1f" % cam.camera.fov)
 
 	# --- Звук ---
 	m.tabs.current_tab = 2

@@ -19,6 +19,7 @@ var bindings := {}            ## действие -> ["key:87", "mouse:1", ""] (
 var mouse_sens := 1.0         ## множитель к базовой чувствительности камеры
 var invert_y := false
 var show_hints := true
+var start_view := "first"     ## first — от первого лица, third — от третьего (колёсиком — плавно между)
 
 # --- Графика ---
 const PRESETS := ["low", "medium", "high"]
@@ -39,14 +40,15 @@ var render_scale := 1.0       ## 0.5 … 1.0
 var fps_limit := 0            ## кадров в секунду (одно из FPS_LIMITS), 0 — без ограничения
 var vsync := true
 var fullscreen := false
-var fov := 62.0
+var fov := 62.0               ## поле зрения от третьего лица
+var fov_fp := 85.0            ## …и от первого (шире — меньше «туннеля»)
 
 # --- Звук (0…1) ---
 const BUSES := ["Master", "SFX", "Music", "UI"]
 var volume := {"Master": 0.8, "SFX": 1.0, "Music": 0.7, "UI": 0.8}
 
-const DEFAULT_CONTROLS := {"mouse_sens": 1.0, "invert_y": false, "show_hints": true}
-const DEFAULT_GRAPHICS := {"preset": "medium", "fps_limit": 0, "vsync": true, "fullscreen": false, "fov": 62.0}
+const DEFAULT_CONTROLS := {"mouse_sens": 1.0, "invert_y": false, "show_hints": true, "start_view": "first"}
+const DEFAULT_GRAPHICS := {"preset": "medium", "fps_limit": 0, "vsync": true, "fullscreen": false, "fov": 62.0, "fov_fp": 85.0}
 const DEFAULT_VOLUME := {"Master": 0.8, "SFX": 1.0, "Music": 0.7, "UI": 0.8}
 
 func _ready() -> void:
@@ -69,6 +71,7 @@ func load_file() -> void:
 	mouse_sens = clampf(float(cfg.get_value("controls", "mouse_sens", mouse_sens)), 0.2, 3.0)
 	invert_y = bool(cfg.get_value("controls", "invert_y", invert_y))
 	show_hints = bool(cfg.get_value("controls", "show_hints", show_hints))
+	start_view = "third" if str(cfg.get_value("controls", "start_view", start_view)) == "third" else "first"
 	preset = str(cfg.get_value("graphics", "preset", preset))
 	if not PRESET_NAMES.has(preset):
 		preset = "medium"
@@ -81,6 +84,7 @@ func load_file() -> void:
 	vsync = bool(cfg.get_value("graphics", "vsync", vsync))
 	fullscreen = bool(cfg.get_value("graphics", "fullscreen", fullscreen))
 	fov = clampf(float(cfg.get_value("graphics", "fov", fov)), 50.0, 90.0)
+	fov_fp = clampf(float(cfg.get_value("graphics", "fov_fp", fov_fp)), 65.0, 110.0)
 	for bus in BUSES:
 		volume[bus] = clampf(float(cfg.get_value("audio", bus, volume[bus])), 0.0, 1.0)
 	if preset != "custom":
@@ -95,6 +99,7 @@ func save() -> void:
 	cfg.set_value("controls", "mouse_sens", mouse_sens)
 	cfg.set_value("controls", "invert_y", invert_y)
 	cfg.set_value("controls", "show_hints", show_hints)
+	cfg.set_value("controls", "start_view", start_view)
 	cfg.set_value("graphics", "preset", preset)
 	cfg.set_value("graphics", "shadows", shadows)
 	cfg.set_value("graphics", "aa", aa)
@@ -103,6 +108,7 @@ func save() -> void:
 	cfg.set_value("graphics", "vsync", vsync)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
 	cfg.set_value("graphics", "fov", fov)
+	cfg.set_value("graphics", "fov_fp", fov_fp)
 	for bus in BUSES:
 		cfg.set_value("audio", bus, volume[bus])
 	cfg.save(PATH)
@@ -118,6 +124,7 @@ func reset_controls() -> void:
 	mouse_sens = DEFAULT_CONTROLS.mouse_sens
 	invert_y = DEFAULT_CONTROLS.invert_y
 	show_hints = DEFAULT_CONTROLS.show_hints
+	start_view = DEFAULT_CONTROLS.start_view
 
 func reset_graphics() -> void:
 	set_preset(DEFAULT_GRAPHICS.preset)
@@ -125,6 +132,7 @@ func reset_graphics() -> void:
 	vsync = DEFAULT_GRAPHICS.vsync
 	fullscreen = DEFAULT_GRAPHICS.fullscreen
 	fov = DEFAULT_GRAPHICS.fov
+	fov_fp = DEFAULT_GRAPHICS.fov_fp
 
 func reset_audio() -> void:
 	volume = DEFAULT_VOLUME.duplicate()

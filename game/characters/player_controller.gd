@@ -25,8 +25,9 @@ func _physics_process(_dt: float) -> void:
 	kombez.in_move = Vector2(dir.x, dir.z)
 	kombez.in_jump = Input.is_action_pressed("jump")
 	kombez.in_crouch = Input.is_action_pressed("crouch")
-	kombez.in_aim_yaw = camera.yaw
-	kombez.in_aim_pitch = camera.pitch
+	kombez.in_aim_yaw = camera.aim_yaw if "aim_yaw" in camera else camera.yaw
+	kombez.in_aim_pitch = camera.aim_pitch if "aim_pitch" in camera else camera.pitch
+	kombez.in_face_aim = camera.has_method("is_first_person") and camera.is_first_person()
 	if not captured:   # планшет в руках — руки заняты
 		kombez.in_grab_l = false
 		kombez.in_grab_r = false

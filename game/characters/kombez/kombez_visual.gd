@@ -21,6 +21,8 @@ var body: RigidBody3D
 var _puff: Node3D
 var _head_mat: ShaderMaterial
 var _helmet: Node3D
+var _head: MeshInstance3D
+var head_layers := 1             ## слой отрисовки головы и каски (своя камера в 1-м лице его не видит)
 var _arms: Array[MeshInstance3D] = []
 var _legs: Array[MeshInstance3D] = []
 var _feet: Array[MeshInstance3D] = []
@@ -78,6 +80,7 @@ func setup(b: RigidBody3D) -> void:
 	head.material_override = _head_mat
 	head.position = Vector3(0, HEAD_Y, 0)
 	_puff.add_child(head)
+	_head = head
 	_set_face("idle")
 	refresh_helmet()
 
@@ -128,6 +131,20 @@ func refresh_helmet() -> void:
 		_helmet.position = Vector3(0, HEAD_Y + 0.17, 0.02)
 		_helmet.rotation = Vector3(-0.06, 0, 0.07)
 		_puff.add_child(_helmet)
+		_set_layers(_helmet, head_layers)
+
+## Голову и каску — на другой слой (для вида от первого лица: тень остаётся, в кадре их нет).
+func set_head_layers(l: int) -> void:
+	head_layers = l
+	_head.layers = l
+	if _helmet != null:
+		_set_layers(_helmet, l)
+
+static func _set_layers(n: Node, l: int) -> void:
+	if n is VisualInstance3D:
+		(n as VisualInstance3D).layers = l
+	for c in n.get_children():
+		_set_layers(c, l)
 
 func tick(dt: float) -> void:
 	_time += dt

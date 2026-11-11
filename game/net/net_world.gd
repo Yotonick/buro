@@ -275,6 +275,7 @@ func _player_input(move: Vector2, buttons: int, yaw: float, pitch: float) -> voi
 	k.in_grab_l = buttons & 2 != 0
 	k.in_grab_r = buttons & 4 != 0
 	k.in_crouch = buttons & 8 != 0
+	k.in_face_aim = buttons & 16 != 0
 	k.in_aim_yaw = wrapf(yaw, -PI, PI)
 	k.in_aim_pitch = clampf(pitch, -1.6, 1.6)
 
@@ -292,7 +293,7 @@ func _physics_process(_dt: float) -> void:
 		_apply_snapshots()
 		var k := local_kombez
 		if k != null and is_instance_valid(k):
-			var buttons := int(k.in_jump) | int(k.in_grab_l) << 1 | int(k.in_grab_r) << 2 | int(k.in_crouch) << 3
+			var buttons := int(k.in_jump) | int(k.in_grab_l) << 1 | int(k.in_grab_r) << 2 | int(k.in_crouch) << 3 | int(k.in_face_aim) << 4
 			_player_input.rpc_id(1, k.in_move, buttons, k.in_aim_yaw, k.in_aim_pitch)
 
 # ---------- снимки: хост пишет ----------

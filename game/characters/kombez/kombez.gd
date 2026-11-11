@@ -48,6 +48,11 @@ const KO_TIME := 2.4
 const HIT_IMPULSE := 90.0        ## удар движущимся предметом
 const SLAM_IMPULSE := 300.0      ## сам во что-то влетел
 const FALL_KO_SPEED := 9.5
+# --- взгляд и руки ---
+const EYE_UP := 0.68             ## глаза: над центром тела…
+const EYE_FWD := 0.17            ## …и чуть вперёд по взгляду (внутри головы, у лица)
+const AIM_PROBE := 2.4           ## на сколько смотрим лучом «куда тянуться»
+const ARM_REACH := 0.82          ## на сколько рука тянется от плеча к прицелу
 
 # --- ввод ---
 var in_move := Vector2.ZERO      ## желаемое направление в мире (x, z), длина <= 1
@@ -57,6 +62,7 @@ var in_grab_r := false
 var in_aim_yaw := 0.0
 var in_aim_pitch := 0.0
 var in_crouch := false
+var in_face_aim := false         ## вид от первого лица: тело всегда смотрит туда же, куда игрок
 
 # --- состояние ---
 var peer_id := 0                 ## чей это персонаж в сети (0 — ничей: стажёр)
@@ -90,6 +96,8 @@ var _ground_point := Vector3.ZERO
 var _prev_vy := 0.0
 var _net_velocity := Vector3.ZERO
 var _net_effort := 0.0
+var _aim_frame := -1
+var _aim_hit := {}
 
 func _ready() -> void:
 	add_to_group("kombez")
@@ -149,13 +157,50 @@ func shoulder_global(side: float) -> Vector3:
 func head_top_global() -> Vector3:
 	return global_transform * Vector3(0, 0.84, 0)
 
-## Куда тянется рука: активная — туда, куда смотрит игрок; свободная — висит у бока.
+## Куда тянется рука. Свободная — висит у бока. Активная пустая — точно в прицел (в то, во что
+## упёрся взгляд), но не дальше длины руки. Активная с хватом (ящик, стена, коллега) — ведётся
+## взглядом с запасом по высоте: глянул вверх — поднял над головой, вниз — подтянулся.
 func hand_target(side: float, active: bool) -> Vector3:
 	if not active:
 		return global_transform * Vector3(side * 0.47, -0.14, -0.04)
-	var pitch := clampf(in_aim_pitch * 1.3 + 0.3, -1.35, 1.45)
-	var dir := Vector3(-side * 0.14, sin(pitch), -cos(pitch)).normalized()
-	return shoulder_global(side) + Basis(Vector3.UP, in_aim_yaw) * dir * 0.78
+	var sh := shoulder_global(side)
+	var h: RigidBody3D = hand_l if side < 0.0 else hand_r
+	if h != null and h.held != null:
+		var pitch := clampf(in_aim_pitch * 1.3 + 0.3, -1.35, 1.45)
+		var dir := Vector3(-side * 0.14, sin(pitch), -cos(pitch)).normalized()
+		return sh + Basis(Vector3.UP, in_aim_yaw) * dir * 0.78
+	var d := aim_dir()
+	var hit := aim_hit()
+	var p: Vector3 = hit["position"] + d * 0.06 if not hit.is_empty() else aim_origin() + d * AIM_PROBE
+	p += Basis(Vector3.UP, in_aim_yaw) * Vector3(side * 0.09, 0.0, 0.0)
+	return sh + (p - sh).limit_length(ARM_REACH)
+
+## Во что упирается взгляд (до AIM_PROBE м): {position, normal, collider, dist} или {}.
+## Сам Комбез, его руки и то, что у него в руках, лучу не мешают. Считается раз за кадр физики.
+func aim_hit() -> Dictionary:
+	var f := Engine.get_physics_frames()
+	if f == _aim_frame or not is_inside_tree():
+		return _aim_hit
+	_aim_frame = f
+	var o := aim_origin()
+	var q := PhysicsRayQueryParameters3D.create(o, o + aim_dir() * AIM_PROBE, L_WORLD | L_PROP | L_BODY | L_NPC)
+	var ex: Array[RID] = [get_rid()]
+	for h in [hand_l, hand_r]:
+		if h == null:
+			continue
+		ex.append(h.get_rid())
+		if h.held != null and is_instance_valid(h.held) and h.held is RigidBody3D:
+			ex.append(h.held.get_rid())
+	q.exclude = ex
+	_aim_hit = get_world_3d().direct_space_state.intersect_ray(q)
+	if not _aim_hit.is_empty():
+		_aim_hit["dist"] = o.distance_to(_aim_hit["position"])
+	return _aim_hit
+
+## Достанет ли рука до точки (с любого плеча).
+func can_reach(p: Vector3) -> bool:
+	var r := ARM_REACH + 0.12
+	return p.distance_to(shoulder_global(-1.0)) <= r or p.distance_to(shoulder_global(1.0)) <= r
 
 ## Подсказка тому, кто смотрит на этого Комбеза (напарник, стажёр).
 func prompt_hint(k: Node, dist: float) -> Array:
@@ -163,9 +208,14 @@ func prompt_hint(k: Node, dist: float) -> Array:
 		return []
 	return [[["grab_left", "grab_right"], "схватить коллегу" if peer_id > 0 else "схватить стажёра", true]]
 
-## Точка на уровне глаз камеры и направление взгляда игрока — туда «целятся» инструменты с пояса.
+## Глаза Комбеза и направление взгляда игрока. Камера стоит ровно тут (1-е лицо) или
+## на штанге позади этой точки (3-е) — поэтому центр экрана всегда совпадает с прицелом
+## рук, ленты, E и подсказок.
 func aim_origin() -> Vector3:
-	return global_position + Vector3.UP * 0.7
+	return eye_point(global_position, in_aim_yaw)
+
+static func eye_point(body_pos: Vector3, yaw: float) -> Vector3:
+	return body_pos + Vector3.UP * EYE_UP + Basis(Vector3.UP, yaw) * Vector3(0, 0, -EYE_FWD)
 
 func aim_dir() -> Vector3:
 	return Basis.from_euler(Vector3(in_aim_pitch, in_aim_yaw, 0.0)) * Vector3.FORWARD
@@ -435,7 +485,7 @@ func _active(dt: float) -> void:
 
 	# куда повернуться: с поднятой рукой — как камера, иначе по ходу движения
 	var want_yaw := _face_yaw
-	if in_grab_l or in_grab_r:
+	if in_grab_l or in_grab_r or in_face_aim:
 		want_yaw = in_aim_yaw
 	elif move.length_squared() > 0.04:
 		want_yaw = atan2(-move.x, -move.z)

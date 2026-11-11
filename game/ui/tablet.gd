@@ -424,7 +424,7 @@ func _controls_page() -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 40)
-	grid.add_theme_constant_override("v_separation", 6)
+	grid.add_theme_constant_override("v_separation", 3)
 	for pair in Controls.ACTIONS:
 		if pair[0] in ["move_forward", "move_back", "move_left", "move_right"]:
 			continue
@@ -447,6 +447,15 @@ func _controls_page() -> Control:
 	el.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	esc.add_child(el)
 	grid.add_child(esc)
+	var wheel := HBoxContainer.new()
+	wheel.add_theme_constant_override("separation", 8)
+	var wk := Style.key_text("колёсико", 29)
+	wk.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	wheel.add_child(wk)
+	var wl := Style.outlined(Style.label("камера ближе / дальше", 17), 6)
+	wl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	wheel.add_child(wl)
+	grid.add_child(wheel)
 	var box := VBoxContainer.new()
 	box.add_child(grid)
 	var foot := Style.typed("Переназначить — Esc → Настройки → Управление", 14, Style.MUTED)

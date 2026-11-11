@@ -23,6 +23,7 @@ var _sens: HSlider
 var _sens_val: Label
 var _invert: CheckButton
 var _hints: CheckButton
+var _view: OptionButton
 var _g := {}                      ## элементы вкладки «Графика»
 var _vol := {}                    ## шина -> [HSlider, Label]
 var _filling := false             ## заполняем элементы из настроек — не считать это правкой
@@ -174,6 +175,22 @@ func _controls_tab() -> Control:
 			Settings.show_hints = v
 			Settings.notify())
 	right.add_child(_hints)
+	right.add_child(Style.spacer(4))
+	right.add_child(Style.title("КАМЕРА", 22, Style.TEXT))
+	var vr := HBoxContainer.new()
+	vr.add_theme_constant_override("separation", 10)
+	var vl := Style.label("Вид в начале", 18)
+	vl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vr.add_child(vl)
+	_view = OptionButton.new()
+	_view.add_item("1-е лицо")
+	_view.add_item("3-е лицо")
+	_view.item_selected.connect(func(i):
+		if not _filling:
+			Settings.start_view = "third" if i == 1 else "first"
+			Settings.notify())
+	vr.add_child(_view)
+	right.add_child(vr)
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(fill)
@@ -327,7 +344,14 @@ func _graphics_tab() -> Control:
 	_g.full = _check(grid, "Полный экран", func(v):
 		Settings.fullscreen = v
 		Settings.apply_window())
-	var fv := _slider_cell(grid, "Поле зрения", 50.0, 90.0, 1.0)
+	var ff := _slider_cell(grid, "Обзор от 1-го лица", 65.0, 110.0, 1.0)
+	_g.fov_fp = ff
+	ff[0].value_changed.connect(func(v):
+		ff[1].text = "%d°" % roundi(v)
+		if not _filling:
+			Settings.fov_fp = v
+			Settings.notify())
+	var fv := _slider_cell(grid, "Обзор от 3-го лица", 50.0, 90.0, 1.0)
 	_g.fov = fv
 	fv[0].value_changed.connect(func(v):
 		fv[1].text = "%d°" % roundi(v)
@@ -391,6 +415,7 @@ func _fill() -> void:
 	_sens_val.text = "×%.2f" % Settings.mouse_sens
 	_invert.button_pressed = Settings.invert_y
 	_hints.button_pressed = Settings.show_hints
+	_view.select(1 if Settings.start_view == "third" else 0)
 	for bus in _vol:
 		_vol[bus][0].value = Settings.volume[bus]
 		_vol[bus][1].text = "выкл" if Settings.volume[bus] <= 0.001 else "%d%%" % roundi(Settings.volume[bus] * 100)
@@ -410,6 +435,8 @@ func _fill_graphics() -> void:
 	_g.full.button_pressed = Settings.fullscreen
 	_g.fov[0].value = Settings.fov
 	_g.fov[1].text = "%d°" % roundi(Settings.fov)
+	_g.fov_fp[0].value = Settings.fov_fp
+	_g.fov_fp[1].text = "%d°" % roundi(Settings.fov_fp)
 	_filling = false
 
 func _reset_tab() -> void:

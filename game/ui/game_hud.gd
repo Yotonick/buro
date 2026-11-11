@@ -10,6 +10,7 @@ const PromptsScript := preload("res://ui/world_prompts.gd")
 const OverlayScript := preload("res://ui/world_overlay.gd")
 const KeyCap := preload("res://ui/theme/key_cap.gd")
 const TabletScript := preload("res://ui/tablet.gd")
+const ReticleScript := preload("res://ui/reticle.gd")
 
 const TIP_TIME := 8.0
 const TIP_MAX := 2              ## одновременно на экране
@@ -23,6 +24,7 @@ var level: Node                 ## уровень (level_base.gd) — планш
 var tablet: Control             ## tablet.gd
 var prompts: Control            ## world_prompts.gd
 var overlay: Control            ## world_overlay.gd
+var reticle: Control            ## reticle.gd — прицел «достаю / не достаю»
 var line_hidden := false        ## говорящий на экране — пузырь вместо строки внизу
 
 var _tips: VBoxContainer
@@ -57,15 +59,9 @@ func _ready() -> void:
 	_tips.offset_top = 96
 	_root.add_child(_tips)
 
-	var dot := ColorRect.new()   # точка прицела: туда тянутся руки и клеится лента
-	dot.color = Color(1, 1, 1, 0.75)
-	dot.set_anchors_preset(Control.PRESET_CENTER)
-	dot.offset_left = -2
-	dot.offset_top = -2
-	dot.offset_right = 2
-	dot.offset_bottom = 2
-	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(dot)
+	reticle = ReticleScript.new()   # прицел: туда тянутся руки и клеится лента
+	reticle.hud = self
+	_root.add_child(reticle)
 
 	tablet = TabletScript.new()
 	tablet.hud = self
@@ -145,7 +141,8 @@ func _controls_card() -> Control:
 	box.add_child(moves)
 	for pair in [["grab_left", "левая рука"], ["grab_right", "правая рука"], ["jump", "прыжок"],
 			["use", "использовать / на пояс"], ["drop_tool", "бросить инструмент"], ["crouch", "присесть"],
-			["flop", "упасть"], ["laugh", "ржать"], ["respawn", "встать на место"], ["tablet", "планшет"]]:
+			["flop", "упасть"], ["laugh", "ржать"], ["respawn", "встать на место"], ["tablet", "планшет"],
+			["view_toggle", "вид 1-е / 3-е лицо (колёсико — плавно)"]]:
 		box.add_child(Style.key_hint(pair[0], pair[1], 18))
 	return card
 
@@ -153,6 +150,7 @@ func _controls_card() -> Control:
 func attach_world(w: Node) -> void:
 	prompts.world = w
 	overlay.world = w
+	reticle.world = w
 
 ## Стикер-совет справа сверху: id — чтобы не повторять; показывается один раз за запуск.
 ## С выключенными подсказками не показывается (и не считается показанным).

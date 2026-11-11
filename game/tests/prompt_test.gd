@@ -109,11 +109,14 @@ func _floating_labels() -> int:
 func _look(from: Vector3, target: Vector3) -> void:
 	k.teleport(from)
 	await _wait(0.15)
-	var d: Vector3 = target - k.aim_origin()
-	var yaw := atan2(-d.x, -d.z)
-	var pitch := atan2(d.y, Vector2(d.x, d.z).length())
-	k.in_aim_yaw = yaw
-	k.in_aim_pitch = pitch
+	var yaw := 0.0
+	var pitch := 0.0
+	for i in 3:   # глаза чуть впереди по взгляду — уточняем направление
+		var d: Vector3 = target - k.aim_origin()
+		yaw = atan2(-d.x, -d.z)
+		pitch = atan2(d.y, Vector2(d.x, d.z).length())
+		k.in_aim_yaw = yaw
+		k.in_aim_pitch = pitch
 	lvl.camera.yaw = yaw
 	lvl.camera.pitch = pitch
 	lvl.camera.snap()
