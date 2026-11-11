@@ -26,6 +26,10 @@ var text := "":
 	set(v):
 		text = v
 		_update()
+var event: InputEvent:   ## показать именно эту клавишу (если action пусто)
+	set(v):
+		event = v
+		_update()
 var cap_height := 34.0:
 	set(v):
 		cap_height = v
@@ -65,7 +69,11 @@ static func action_label(act: String) -> String:
 func _update() -> void:
 	_icon = null
 	_shown = text
-	if action != "" and InputMap.has_action(action):
+	if action == "" and event != null:
+		if event is InputEventMouseButton and MOUSE.has(event.button_index):
+			_icon = MOUSE[event.button_index]
+		_shown = event_label(event)
+	elif action != "" and InputMap.has_action(action):
 		var ev := InputMap.action_get_events(action)
 		if ev.size() > 0:
 			var e: InputEvent = ev[0]

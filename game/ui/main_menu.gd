@@ -3,6 +3,7 @@ extends Control
 ## одиночные выезды. (Позже фоном станет 3D-гараж бюро — см. план «визуал и интерфейс».)
 
 const Style := preload("res://ui/ui_style.gd")
+const SettingsMenu := preload("res://ui/settings_menu.gd")
 
 var _name_edit: LineEdit
 var _ip_edit: LineEdit
@@ -79,9 +80,15 @@ func _ready() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		solo.add_child(b)
 	box.add_child(Style.spacer(4))
+	var last := HBoxContainer.new()
+	box.add_child(last)
+	var opts := _button("Настройки", open_settings)
+	opts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	last.add_child(opts)
 	var quit := _button("Выход", func(): get_tree().quit(), "danger")
 	quit.set_meta("back", true)
-	box.add_child(quit)
+	quit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	last.add_child(quit)
 
 	var ver := Style.label("v" + str(ProjectSettings.get_setting("application/config/version")), 15, Style.MUTED)
 	ver.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 26)
@@ -91,6 +98,15 @@ func _ready() -> void:
 		_status.text = Game.pending_message
 		Game.pending_message = ""
 	_name_edit.grab_focus()
+
+var settings_menu: Control
+
+func open_settings() -> void:
+	if is_instance_valid(settings_menu):
+		return
+	settings_menu = SettingsMenu.new()
+	add_child(settings_menu)
+	settings_menu.closed.connect(func(): _name_edit.grab_focus())
 
 func _edge_stripes() -> void:
 	for top in [true, false]:

@@ -1,7 +1,7 @@
 extends Node3D
 ## Камера от третьего лица: вращается мышью вокруг персонажа, не проходит сквозь стены.
 
-const SENS := 0.0026
+const SENS := 0.0026   ## базовая; умножается на Settings.mouse_sens
 const DISTANCE := 4.4
 
 var target: Node3D
@@ -21,15 +21,20 @@ func _ready() -> void:
 	_arm.shape = sh
 	add_child(_arm)
 	camera = Camera3D.new()
-	camera.fov = 62.0
+	camera.fov = Settings.fov
 	camera.far = 200.0
 	_arm.add_child(camera)
 	camera.make_current()
+	Settings.changed.connect(_on_settings)
+
+func _on_settings() -> void:
+	camera.fov = Settings.fov
 
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		yaw = wrapf(yaw - e.relative.x * SENS, -PI, PI)
-		pitch = clampf(pitch - e.relative.y * SENS, -1.25, 1.1)
+		var k := SENS * Settings.mouse_sens
+		yaw = wrapf(yaw - e.relative.x * k, -PI, PI)
+		pitch = clampf(pitch - e.relative.y * k * (-1.0 if Settings.invert_y else 1.0), -1.25, 1.1)
 
 func snap() -> void:
 	if target != null:

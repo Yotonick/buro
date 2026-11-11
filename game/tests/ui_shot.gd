@@ -1,5 +1,6 @@
 extends Node
-## Кадры экранов интерфейса и образец всех кирпичиков стиля:
+## Кадры экранов интерфейса (меню, настройки — 3 вкладки и конфликт, лобби, образец кирпичиков,
+## пауза, настройки из паузы, табличка итога):
 ##   xvfb-run -a -s "-screen 0 1280x720x24" godot --path game --rendering-driver opengl3 \
 ##     --write-movie /tmp/ui/f.png --fixed-fps 30 res://tests/ui_shot.tscn
 ## Номер кадра печатается в строке SHOT (файлы сдвинуты — смотри соседние).
@@ -10,6 +11,22 @@ func _ready():
 	await f(5)
 	show_scene(load("res://ui/main_menu.tscn").instantiate())
 	await f(10); shot("menu")
+	# настройки поверх меню: три вкладки, конфликт и ожидание клавиши
+	cur.open_settings()
+	var sm = cur.settings_menu
+	await f(10); shot("settings_controls")
+	var e := InputEventKey.new(); e.physical_keycode = KEY_E; e.pressed = true
+	sm._start_wait("jump", 1); sm.feed_binding(e)
+	sm._start_wait("flop", 1)
+	await f(10); shot("settings_conflict")
+	sm._waiting = []
+	Controls.reset_action("jump")
+	sm.tabs.current_tab = 1
+	await f(10); shot("settings_graphics")
+	sm.tabs.current_tab = 2
+	await f(10); shot("settings_audio")
+	sm.close()
+	await f(2)
 	# лобби: имитируем сессию хоста с тремя игроками
 	Net.set("_in_session", true)
 	Net.players = {1: {"name": "Ёжик", "slot": 0}, 2: {"name": "Толян", "slot": 1}, 3: {"name": "Маринка", "slot": 2}}
@@ -23,6 +40,9 @@ func _ready():
 	show_scene(hud)
 	hud.set_paused(true)
 	await f(10); shot("pause")
+	hud.open_settings()
+	await f(10); shot("pause_settings")
+	hud.settings_menu.close()
 	hud.set_paused(false)
 	hud.show_banner("КУПОЛ ДЕРЖИТСЯ", "Метрдотель: «Сносно. Для подводных людей.»", true, 3)
 	hud.show_line("Метрдотель: «Руки! Уберите руки!»")

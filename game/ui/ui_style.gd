@@ -187,6 +187,41 @@ static func _build_theme() -> Theme:
 	for s in ["grabber", "grabber_highlight", "grabber_pressed"]:
 		t.set_stylebox(s, "VScrollBar", _box(SIGNAL if s != "grabber" else STEEL, 4, 0))
 
+	# Гнездо под клавишу в настройках управления: тёмная прорезь, при наведении — сигнальный кант,
+	# «Conflict» — красный кант (клавиша занята другим действием), «Waiting» — ждём нажатия.
+	t.set_type_variation("SlotButton", "Button")
+	var slot := _box(NAVY_DEEP, 6, 6)
+	slot.set_border_width_all(2)
+	slot.border_color = PANEL_HI
+	var slot_h := slot.duplicate()
+	slot_h.border_color = SIGNAL
+	var slot_p := slot_h.duplicate()
+	slot_p.bg_color = PANEL
+	for st in [["normal", slot], ["hover", slot_h], ["pressed", slot_p], ["hover_pressed", slot_p],
+			["focus", slot_h], ["disabled", slot]]:
+		t.set_stylebox(st[0], "SlotButton", st[1])
+	t.set_font("font", "SlotButton", HEAD)
+	t.set_font_size("font_size", "SlotButton", 18)
+	t.set_color("font_color", "SlotButton", MUTED)
+	t.set_color("font_hover_color", "SlotButton", SIGNAL_HI)
+	t.set_type_variation("SlotConflict", "SlotButton")
+	var slot_c := slot.duplicate()
+	slot_c.border_color = STAMP
+	slot_c.set_border_width_all(3)
+	slot_c.bg_color = Color("3a1a1f")
+	var slot_ch := slot_c.duplicate()
+	slot_ch.border_color = Color("ff6a5c")
+	for st in [["normal", slot_c], ["hover", slot_ch], ["pressed", slot_ch], ["hover_pressed", slot_ch], ["focus", slot_ch]]:
+		t.set_stylebox(st[0], "SlotConflict", st[1])
+	t.set_type_variation("SlotWaiting", "SlotButton")
+	var slot_w := _box(SIGNAL, 6, 6)
+	slot_w.set_border_width_all(2)
+	slot_w.border_color = SIGNAL_HI
+	for st in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		t.set_stylebox(st, "SlotWaiting", slot_w)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		t.set_color(c, "SlotWaiting", NAVY)
+
 	t.set_constant("separation", "VBoxContainer", 10)
 	t.set_constant("separation", "HBoxContainer", 10)
 	return t
@@ -419,6 +454,13 @@ static func stripe(height := 14.0) -> Control:
 static func key(action: String, size := 34.0) -> Control:
 	var k: Control = KeyCap.new()
 	k.action = action
+	k.cap_height = size
+	return k
+
+## Клавиша по событию ввода (для гнёзд в настройках управления).
+static func key_event(e: InputEvent, size := 34.0) -> Control:
+	var k: Control = KeyCap.new()
+	k.event = e
 	k.cap_height = size
 	return k
 

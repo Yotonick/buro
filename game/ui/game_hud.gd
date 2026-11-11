@@ -3,6 +3,7 @@ extends CanvasLayer
 ## Мир на паузе не останавливается — просто отпускается мышь.
 
 const Style := preload("res://ui/ui_style.gd")
+const SettingsMenu := preload("res://ui/settings_menu.gd")
 
 var _hint: Label
 var _pause: Control
@@ -60,6 +61,7 @@ func _ready() -> void:
 	box.add_child(sub)
 	box.add_child(Style.spacer(4))
 	box.add_child(Style.button("Продолжить", set_paused.bind(false), "primary"))
+	box.add_child(Style.button("Настройки", open_settings))
 	if Net.in_session() and Net.is_host():
 		box.add_child(Style.button("Вернуть бригаду в лобби", func(): Game.back_to_lobby()))
 	var quit := Style.button("В меню", _to_menu, "danger")
@@ -67,6 +69,8 @@ func _ready() -> void:
 	box.add_child(quit)
 	row.add_child(_controls_card())
 	set_paused(false)
+	Settings.changed.connect(_on_settings)
+	_on_settings()
 
 	_banner = VBoxContainer.new()
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -187,10 +191,24 @@ func banner_text() -> String:
 func set_hint(text: String) -> void:
 	_hint.text = text
 
+func _on_settings() -> void:
+	_hint.visible = Settings.show_hints
+
+var settings_menu: Control
+
+## Настройки поверх паузы (мир при этом идёт дальше, как и в паузе).
+func open_settings() -> void:
+	if is_instance_valid(settings_menu):
+		return
+	settings_menu = SettingsMenu.new()
+	_root.add_child(settings_menu)
+
 func is_paused() -> bool:
 	return _pause.visible
 
 func set_paused(v: bool) -> void:
+	if not v and is_instance_valid(settings_menu):
+		settings_menu.close()
 	_pause.visible = v
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if v else Input.MOUSE_MODE_CAPTURED
 
