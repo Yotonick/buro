@@ -3,6 +3,7 @@ extends Node
 ##   --autostart=N       хост начинает смену, когда в лобби N игроков
 ##   --map=КЛЮЧ          …на этом уровне (по умолчанию полигон)
 ##   --burst=T           хост на T-й секунде уровня прорывает две течи («Глубокая тарелка»)
+##   --surge=T           хост на T-й секунде устраивает скачок в щитке (пробка вылетает, рубильник падает)
 ##   --pump=T            хост на T-й секунде собирает трубу насоса (ровно, с лентой) и открывает вентиль
 ##   --lobby=T           хост на T-й секунде уровня возвращает бригаду в лобби
 ##   --walk=A-B          свой персонаж идёт вперёд с A по B секунду на уровне
@@ -25,6 +26,7 @@ var _give_done := false
 var _give_t := 0.0
 var _burst_done := false
 var _pump_done := false
+var _surge_done := false
 var _lobby_done := false
 var _autostarted := false
 var _prev := {}      ## имя -> позиция на прошлом тике
@@ -70,6 +72,9 @@ func _physics_process(dt: float) -> void:
 			_burst_done = true
 			_level.leaks[0].burst()
 			_level.leaks[5].burst()
+		if args.has("surge") and not _surge_done and _t >= float(args["surge"]) and "board" in _level:
+			_surge_done = true
+			_level.board.surge()
 		if args.has("pump") and not _pump_done and _t >= float(args["pump"]) and "pump" in _level:
 			_pump_done = true
 			_fix_pump(_level.pump)
@@ -178,6 +183,9 @@ func _report() -> void:
 		out["leaks"].append(l.state)
 	for f in get_tree().get_nodes_in_group("flood"):
 		out["flood"] = snappedf(f.level, 0.001)
+	if _level != null and "board" in _level and _level.board != null:
+		var bd: Node3D = _level.board
+		out["board"] = [bd.fuse_in, bd.lever_on, bd.short, bd.lit_sectors()]
 	for pm in get_tree().get_nodes_in_group("pump"):
 		out["pump"] = [pm.state, snappedf(pm.valve, 0.05), pm.loose_joints.size()]
 	print("PROBE ", JSON.stringify(out))

@@ -4,12 +4,14 @@ extends "res://levels/level_base.gd"
 ## служебный шлюз. Течи прорываются всё чаще; вода поднимается от каждой открытой.
 ## Дошла до столов — ресторан затопило. Продержались смену и всё заделано — справились.
 ## Насос у дальней стены откачивает воду — если собрать его разорванную трубу.
-## (Щиток, осьминог и приёмка метрдотелем — следующими шагами.)
+## Щиток у западной стены даёт свет: скачки выбивают пробки и рубильник, вода до розеток — короткое.
+## (Осьминог и приёмка метрдотелем — следующими шагами.)
 
 const LeakScript := preload("res://levels/deep_plate/leak.gd")
 const FloodScript := preload("res://levels/deep_plate/flood.gd")
 const ShiftScript := preload("res://levels/shift.gd")
 const PumpScript := preload("res://levels/deep_plate/pump.gd")
+const BoardScript := preload("res://levels/deep_plate/switchboard.gd")
 const SeaLife := preload("res://levels/deep_plate/sea_life.gd")
 const FLOOR_SHADER := preload("res://levels/deep_plate/floor.gdshader")
 
@@ -18,6 +20,7 @@ const WALL_H := 3.2            ## высота стеклянной стены, 
 const SEGMENTS := 40           ## стена собрана из плоских стёкол
 const DOOR_ANGLE := PI / 2     ## шлюз — со стороны +Z
 const PUMP_AT := Vector3(0, 0, -8.6)   ## насосная — у стекла напротив шлюза
+const BOARD_ANGLE := PI        ## щиток — у стекла с запада (-X)
 const TABLE_H := 0.72          ## вода выше этого — затопило
 const SHIFT_LEN := 210.0       ## столько секунд прорываются новые течи
 const FIRST_LEAK := 12.0
@@ -42,6 +45,11 @@ var leaks: Array = []
 var flood: Node3D
 var shift: Node3D
 var pump: Node3D
+var board: Node3D
+var env: Environment
+var table_lamps: Array = []
+var center_light: OmniLight3D
+var sun: DirectionalLight3D
 
 var _next_leak := FIRST_LEAK
 var _rng := RandomNumberGenerator.new()
@@ -56,8 +64,9 @@ func _build() -> void:
 	_build_airlock()
 	_build_hall()
 	_build_pump()
+	_build_board()
 	world.spawned.connect(_on_kombez_spawned)
-	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
+	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nЩиток: пробки — обратно в гнёзда, рубильник — вверх (падает — держи или примотай), вода у розеток — повесь щиток на крюк\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
 
 func _on_kombez_spawned(node: Node, kind: String, _params: Dictionary) -> void:
 	if kind == "kombez":
@@ -80,15 +89,18 @@ func _tick(dt: float) -> void:
 	if flood.level >= TABLE_H:
 		shift.finish(false, "ЗАТОПИЛО", "Банкет поплыл. Метрдотель вызывает другую бригаду.")
 		return
+	var crew := clampi(Net.players.size() if Net.in_session() else 1, 1, 4)
+	var k: float = [1.4, 1.0, 0.85, 0.75][crew - 1]
 	if shift.time < SHIFT_LEN:
+		board.work(dt, k, shift.time / SHIFT_LEN)
 		_next_leak -= dt
 		if _next_leak <= 0.0:
 			_burst_one()
-			var crew := clampi(Net.players.size() if Net.in_session() else 1, 1, 4)
-			var k: float = [1.4, 1.0, 0.85, 0.75][crew - 1]
 			_next_leak = lerpf(GAP_START, GAP_END, shift.time / SHIFT_LEN) * k
 	elif open == 0:
-		shift.finish(true, "КУПОЛ ДЕРЖИТСЯ", "Смена окончена. Гости даже не заметили (почти).")
+		var lit: int = board.lit_sectors()
+		var light := "Свет горит." if lit == 3 else ("Правда, банкет доедали в темноте." if lit == 0 else "Правда, в углу темновато.")
+		shift.finish(true, "КУПОЛ ДЕРЖИТСЯ", "Смена окончена. Гости даже не заметили (почти). " + light)
 
 func _burst_one() -> void:
 	var whole := leaks.filter(func(l): return not l.is_burst())
@@ -99,7 +111,7 @@ func _burst_one() -> void:
 # ---------- постройка (одинаково у всех) ----------
 
 func _build_env() -> void:
-	var env := WorldEnvironment.new()
+	var we := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
 	e.background_color = Color("06222e")
@@ -110,9 +122,10 @@ func _build_env() -> void:
 	e.fog_enabled = true
 	e.fog_light_color = Color("0b3a4a")
 	e.fog_density = 0.018
-	env.environment = e
-	add_child(env)
-	var sun := DirectionalLight3D.new()   # свет с поверхности моря
+	we.environment = e
+	add_child(we)
+	env = e
+	sun = DirectionalLight3D.new()   # свет с поверхности моря
 	sun.rotation_degrees = Vector3(-70, 20, 0)
 	sun.light_energy = 0.75
 	sun.light_color = Color("bfe6ff")
@@ -315,6 +328,18 @@ func _build_pump() -> void:
 		[lying.call(Vector3(-1.0, 0, -7.4), 0.4), lying.call(Vector3(1.3, 0, -7.2), -0.6), lying.call(Vector3(2.2, 0, 1.8), 1.1)])
 	world.track(pump)
 
+func _build_board() -> void:
+	board = BoardScript.new()
+	var at := Vector3(cos(BOARD_ANGLE), 0, sin(BOARD_ANGLE)) * R
+	var into := -at.normalized()
+	board.build(self, Transform3D(Basis(Vector3.UP, atan2(into.x, into.z)), at))
+	world.track(board)
+	# пробка i — столы 2i и 2i+1; общий свет горит, пока есть хоть один сектор
+	var sectors: Array = []
+	for i in 3:
+		sectors.append([table_lamps[i * 2], table_lamps[i * 2 + 1]])
+	board.set_lights(sectors, [center_light], env, sun)
+
 func _build_hall() -> void:
 	# центральная колонна с отметкой «вода до столов»
 	var col := Kit.block(self, Vector3(0, 4.0, 0), Vector3(0.9, 8.0, 0.9), Kit.mat(Color("d9d2bf"), 0.4))
@@ -330,7 +355,7 @@ func _build_hall() -> void:
 	for s in [0.0, PI / 2, PI, PI * 1.5]:
 		Kit.sign(self, Vector3(sin(s) * 0.68, TABLE_H + 0.18, cos(s) * 0.68), "вода до сюда — конец", s, 28)
 	Kit.sign(self, Vector3(0, 3.3, 0.7), "«ГЛУБОКАЯ ТАРЕЛКА»\nресторан на дне", 0.0, 64)
-	var center_light := OmniLight3D.new()
+	center_light = OmniLight3D.new()
 	center_light.position = Vector3(0, 3.6, 0)
 	center_light.light_color = Color("ffd9a0")
 	center_light.light_energy = 1.4
@@ -365,6 +390,7 @@ func _build_hall() -> void:
 		lamp.light_energy = 0.9
 		lamp.omni_range = 3.5
 		add_child(lamp)
+		table_lamps.append(lamp)
 	# растения в кадках у стекла
 	for i in 8:
 		var a := i * TAU / 8.0 + 0.4
