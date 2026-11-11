@@ -136,3 +136,18 @@ func _pin(a: PhysicsBody3D, b: PhysicsBody3D, at: Vector3) -> void:
 	j.position = at
 	j.node_a = j.get_path_to(a)
 	j.node_b = j.get_path_to(b)
+
+func tablet_order() -> Dictionary:
+	return {"client": "Полигон бюро", "who": "Заказчик: никто (и слава богу)",
+		"task": "Тренировка. Ничего не сломано — пока вы не пришли.", "phase": "ТРЕНИРОВКА", "time": "",
+		"items": [{"text": "Залезть на вышку", "state": "info", "note": "4.6 м, руками"},
+			{"text": "Примотать стажёра к карусели", "state": "info", "note": "ради науки"},
+			{"text": "Поднять ящик 70 кг", "state": "info", "note": "вдвоём, а лучше втроём"}],
+		"pay": "Оплата — не положена"}
+
+func zone_of(p: Vector3) -> String:
+	if p.distance_to(carousel.global_position) < 3.0:
+		return "у карусели"
+	if is_instance_valid(bag) and p.distance_to(bag.global_position) < 2.5:
+		return "у груши"
+	return "полигон"

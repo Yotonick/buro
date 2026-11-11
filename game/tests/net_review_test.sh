@@ -32,6 +32,7 @@ check(len(fin) == 3, "все трое дождались итога приёмк
 mid = rep.get("lena", [])
 if mid and "maitre" in mid[0]:
     check(mid[0]["maitre"][0] and mid[0]["shift"][0] == 3, "Лена вошла посреди обхода: метрдотель в зале, идёт приёмка: %s" % mid[0]["shift"][:2])
+    check(any("Столы проверены" in t for t in mid[0]["tablet"][0]), "у Лены посреди обхода в планшете — ход приёмки: %s" % mid[0]["tablet"][0][:2])
 else:
     check(False, "Лена прислала отчёт посреди обхода")
 if len(fin) == 3:
@@ -44,6 +45,8 @@ if len(fin) == 3:
         check(d < 0.2, "%s: метрдотель там же, где у хоста (%.2f м)" % (n, d))
         check(r["maitre"][3] == h["maitre"][3] and r["maitre"][2] == h["maitre"][2], "%s: та же реплика и лицо: %s" % (n, r["maitre"][3]))
         check(r["shift"][1:] == h["shift"][1:], "%s: те же звёзды и табличка: %s" % (n, r["shift"][1:3]))
+        check(r["tablet"][0] == h["tablet"][0] and len(h["tablet"][0]) >= 2, "%s: в планшете тот же ход приёмки: %s" % (n, r["tablet"][0][:2]))
+        check(abs(r["tablet"][1] - h["tablet"][1]) <= 3, "%s: время смены в планшете как у хоста (%d / %d с)" % (n, r["tablet"][1], h["tablet"][1]))
 logs = "".join(open(f, encoding="utf-8", errors="replace").read() for f in glob.glob(out + "/*.log"))
 check("SCRIPT ERROR" not in logs, "нет ошибок скриптов")
 check("above the MTU" not in logs, "снимки не больше MTU")

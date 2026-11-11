@@ -66,8 +66,11 @@ func _ready() -> void:
 	hud = HudScript.new()
 	add_child(hud)
 	hud.attach_world(world)
+	hud.level = self
+	hud.tablet_toggled.connect(func(open: bool): controller.walk_only = open)
 	for t in intro_tips:
 		hud.tip(t[0], t[1], 10.0)
+	hud.tip("tablet", "%s — рабочий планшет: заказ, чек-лист, где бригада. Ходить с ним можно." % hud.key_name("tablet"), 9.0)
 
 	if world.is_authority():
 		if Net.in_session():
@@ -152,3 +155,64 @@ func _check_tips() -> void:
 		if t.get("holder_id") and world.node_of(t.holder_id) == player:
 			hud.tip("belt", "Рулон на поясе, руки свободны. %s — клеить туда, куда смотришь: раз — конец, второй раз — примотал. %s — бросить рулон."
 				% [hud.key_name("use"), hud.key_name("drop_tool")])
+
+# ---------- рабочий планшет (ui/tablet.gd спрашивает раз в четверть секунды, у всех) ----------
+
+## Вкладка «Заказ». Уровень-вызов переопределяет. Поля:
+##   client — объект, who — заказчик, task — что сломано, phase — «СМЕНА»/«ПРИЁМКА»/…,
+##   time — строка времени, items — чек-лист [{text, state: ok|bad|warn|info, note}],
+##   review — то же для приёмки (если идёт), pay — строка про оплату.
+func tablet_order() -> Dictionary:
+	return {"client": "Без заказа", "who": "Бюро", "task": "Вызова нет. Можно дурачиться.",
+		"phase": "", "time": "", "items": [], "pay": ""}
+
+## Вкладка «Бригада»: [{name, color, me, status, where, dist}], свой — первым.
+func tablet_crew() -> Array:
+	var out: Array = []
+	var ids := _players.keys()
+	ids.sort()
+	var me: Kombez = player
+	for peer in ids:
+		var k: Kombez = _players[peer]
+		if not is_instance_valid(k):
+			continue
+		var st: Array[String] = []
+		if k.is_ko():
+			st.append("в нокауте")
+		if _has_tape(k):
+			st.append("лента на поясе")
+		st.append_array(crew_status(k))
+		var d := -1.0
+		if is_instance_valid(me) and k != me:
+			d = me.global_position.distance_to(k.global_position)
+		var nm := k.player_name if k.player_name != "" else "Комбез"
+		var row := {"name": nm, "color": k.suit_color, "me": k == me,
+			"status": ", ".join(st) if not st.is_empty() else "в строю", "ko": k.is_ko(),
+			"where": zone_of(k.global_position), "dist": d}
+		if k == me:
+			out.push_front(row)
+		else:
+			out.append(row)
+	return out
+
+## Что ещё сказать про напарника на этом уровне («в воде по пояс» и т.п.).
+func crew_status(_k: Kombez) -> Array[String]:
+	return []
+
+## Где это место словами («шлюз», «у насоса») — для вкладки «Бригада».
+func zone_of(_p: Vector3) -> String:
+	return ""
+
+## Служебные записки, которые уровень добавляет к общим (вкладка «Заметки»): [[от кого, текст], …].
+func tablet_notes() -> Array:
+	return []
+
+func _has_tape(k: Kombez) -> bool:
+	for t in get_tree().get_nodes_in_group("tool"):
+		if t.get("holder_id") and world.node_of(t.holder_id) == k:
+			return true
+	return false
+
+static func clock(sec: float) -> String:
+	var s := maxi(int(sec), 0)
+	return "%02d:%02d" % [s / 60, s % 60]

@@ -451,3 +451,143 @@ func _build_hall() -> void:
 			continue   # проём шлюза и насосная
 		var p := Kit.model_prop(self, "res://assets/furniture/pottedPlant.glb", Vector3(cos(a), 0, sin(a)) * (R - 0.8), 2.0, 12.0)
 		p.set_meta("float", 0.4)
+
+# ---------- рабочий планшет (у всех: всё нужное приходит по сети) ----------
+
+const REVIEW_CAT := {"еда": "пропала еда", "посуда": "посуда где попало", "мебель": "мебель не на месте",
+	"свет": "темно у столов", "вода": "вода в зале", "течи": "течёт при нём", "хамство": "хамство бригады"}
+
+func tablet_order() -> Dictionary:
+	var items: Array = []
+	var t: float = shift.time
+	items.append({"text": "Продержаться смену", "state": "ok" if t >= SHIFT_LEN else "info",
+		"note": "%s из %s" % [clock(minf(t, SHIFT_LEN)), clock(SHIFT_LEN)]})
+	var open := 0
+	var seep := 0
+	var burst := 0
+	for l in leaks:
+		if not l.is_burst():
+			continue
+		burst += 1
+		if l.flow() >= 0.9:
+			open += 1
+		elif l.flow() > 0.0:
+			seep += 1
+	var lt := "Течи: всё сухо" if burst == 0 else "Течи: открыто %d" % open
+	var ln := "прорвалось %d, заделано %d" % [burst, burst - open - seep]
+	if seep > 0:
+		ln += ", сочится %d" % seep
+	items.append({"text": lt, "state": "bad" if open > 0 else ("warn" if seep > 0 else "ok"), "note": ln})
+	var cm := int(round(flood.level * 100.0))
+	items.append({"text": "Вода в зале: %d см" % cm, "state": "ok" if cm < 4 else ("warn" if flood.level < TABLE_H * 0.55 else "bad"),
+		"note": "до столов — %d см" % int(TABLE_H * 100.0)})
+	match pump.state:
+		PumpScript.St.BROKEN:
+			items.append({"text": "Насос: труба разорвана", "state": "bad", "note": "3 куска от приямка до насоса, стыки — лентой"})
+		PumpScript.St.CLOSED:
+			items.append({"text": "Насос: собран", "state": "warn", "note": "штурвал против часовой: %d%%" % int(pump.valve * 100.0)})
+		_:
+			var lj: int = pump.loose_joints.size()
+			items.append({"text": "Насос: качает", "state": "ok" if lj == 0 else "warn",
+				"note": "без брызг" if lj == 0 else "брызжет %d стык(а)" % lj})
+	var lit := 0
+	for i in 3:
+		if board.fuse_in[i] and board.lever_on and not board.short:
+			lit += 1
+	var bn := ""
+	if board.short:
+		bn = "КОРОТКОЕ: щиток — на крюк!"
+	elif board.fuse_in.has(false):
+		bn = "нет пробки: %d" % board.fuse_in.count(false)
+	elif not board.lever_on:
+		bn = "рубильник внизу"
+	elif not board.latch_ok:
+		bn = "защёлка сломана — держите рубильник"
+	else:
+		bn = "всё горит"
+	items.append({"text": "Свет: %d/3" % lit, "state": "ok" if lit == 3 else ("bad" if lit == 0 else "warn"), "note": bn})
+
+	var phase := "СМЕНА"
+	match shift.phase:
+		ShiftScript.P.REVIEW:
+			phase = "ПРИЁМКА"
+		ShiftScript.P.WON:
+			phase = "ПРИНЯТО"
+		ShiftScript.P.FAILED:
+			phase = "ЗАТОПЛЕНО"
+	var d := {"client": "Ресторан «Глубокая тарелка»", "who": "Заказчик: метрдотель (лично)",
+		"task": "Купол течёт посреди банкета. Не дать воде дойти до столов, пока идёт смена. Потом — приёмка.",
+		"phase": phase, "time": clock(t), "items": items, "pay": "Оплата — по итогам приёмки",
+		"stars": shift.stars}
+	var pg: Dictionary = shift.progress
+	if pg.has("rv_kinds") and shift.phase != ShiftScript.P.WORK:
+		d["review"] = _review_items(pg)
+	return d
+
+func _review_items(pg: Dictionary) -> Array:
+	var kinds: Array = pg.get("rv_kinds", [])
+	var at := int(pg.get("rv_i", -1))
+	var done_all: bool = pg.get("rv_exit", false) or shift.phase != ShiftScript.P.REVIEW
+	var tn := 0
+	var td := 0
+	var ln := 0
+	var ld := 0
+	for i in kinds.size():
+		var passed := done_all or i < at
+		if kinds[i] == "t":
+			tn += 1
+			td += int(passed)
+		else:
+			ln += 1
+			ld += int(passed)
+	var out: Array = []
+	var next := ""
+	if not done_all and at >= 0 and at < kinds.size():
+		next = "сейчас у стола" if kinds[at] == "t" else "сейчас стучит по заплатке"
+	elif not done_all:
+		next = "входит в зал"
+	out.append({"text": "Столы проверены: %d/%d" % [td, tn], "state": "ok" if td == tn else "info", "note": next})
+	if ln > 0:
+		out.append({"text": "Заплатки простучаны: %d/%d" % [ld, ln], "state": "ok" if ld == ln else "info", "note": ""})
+	var cat: Dictionary = pg.get("rv_cat", {})
+	var keys := cat.keys()
+	keys.sort_custom(func(a, b): return float(cat[a]) > float(cat[b]))
+	for k in keys:
+		if float(cat[k]) >= 0.1:
+			out.append({"text": "Претензия: " + str(REVIEW_CAT.get(k, k)), "state": "bad" if float(cat[k]) >= 0.5 else "warn",
+				"note": "−%.1f зв." % float(cat[k])})
+	if done_all:
+		out.append({"text": "Обход окончен", "state": "info", "note": "ждём вердикт" if shift.phase == ShiftScript.P.REVIEW else ""})
+	return out
+
+func zone_of(p: Vector3) -> String:
+	var flat := Vector2(p.x, p.z)
+	if p.z > R - 0.5 and absf(p.x) < 2.2:
+		return "шлюз"
+	if flat.length() > R + 0.5:
+		return "за бортом?!"
+	if p.distance_to(PUMP_AT) < 3.2:
+		return "у насоса"
+	if is_instance_valid(board.panel) and p.distance_to(board.panel.global_position) < 2.5:
+		return "у щитка"
+	if flat.length() < 1.6:
+		return "у колонны"
+	for i in tables.size():
+		var c: Vector3 = tables[i]["center"]
+		if Vector2(c.x, c.z).distance_to(flat) < 1.7:
+			return "у стола %d" % (i + 1)
+	return "в зале"
+
+func crew_status(k: Kombez) -> Array[String]:
+	var out: Array[String] = []
+	if flood.level > 0.04:
+		var d: float = flood.depth_of(k)
+		if d > 0.45:
+			out.append("в воде по пояс")
+		elif d > 0.05:
+			out.append("мочит ноги")
+	return out
+
+func tablet_notes() -> Array:
+	return [["Метрдотель — бюро", "Убедительно прошу бригаду не кормить рыб нашими гостями. И наоборот."],
+		["Отдел снабжения", "Заглушки посчитаны. Если после смены их станет меньше — вычтем. Если больше — тоже вычтем, за подозрительность."]]

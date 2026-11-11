@@ -64,6 +64,16 @@ func start() -> void:
 	_off = 0.0
 	_step = "enter"
 	_t = 0.0
+	_cat.clear()
+	_publish()
+
+## Ход обхода — в смену (для планшета у всех): куда он идёт, что уже проверено, за что штрафы.
+func _publish() -> void:
+	var kinds: Array = []
+	for st in _stops:
+		kinds.append("t" if st["kind"] == "table" else "l")
+	level.shift.set_progress({"rv_i": _i, "rv_kinds": kinds, "rv_cat": _cat.duplicate(),
+		"rv_exit": _step == "exit" or _step == "verdict" or _step == "done"})
 
 func _entry() -> Vector3:
 	return Vector3(cos(level.DOOR_ANGLE), 0, sin(level.DOOR_ANGLE)) * (level.R - 1.2)
@@ -170,6 +180,7 @@ func _wait(step: String) -> void:
 
 func _next() -> void:
 	_i += 1
+	_publish()
 	if _i >= _stops.size():
 		_exit()
 		return
@@ -192,6 +203,7 @@ func _arrive() -> void:
 func _exit() -> void:
 	npc.go(_route(TAU, _free(_entry())))
 	_wait("exit")
+	_publish()
 
 # ---------- проверки ----------
 
@@ -411,6 +423,8 @@ func stars() -> int:
 
 func _add(cat: String, v: float) -> void:
 	_cat[cat] = float(_cat.get(cat, 0.0)) + v
+	if running:
+		level.shift.set_progress({"rv_cat": _cat.duplicate()})   # часто — но смена шлёт не чаще 2 раз/с
 
 func _say(text: String, face: String) -> void:
 	said.append(text)

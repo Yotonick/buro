@@ -205,6 +205,10 @@ func _report() -> void:
 		var m: Node3D = _level.maitre
 		out["maitre"] = [m.active, _p(m.global_position), m.mood, m.last_line()]
 		out["shift"] = [_level.shift.phase, _level.shift.stars, _level.hud.banner_stars(), _level.hud.banner_text()]
+		var rv: Array = []   # что пишет планшет про приёмку (ход приёмки идёт по сети)
+		for it in _level.tablet_order().get("review", []):
+			rv.append(str(it["text"]))
+		out["tablet"] = [rv, int(_level.shift.time)]
 	for pm in get_tree().get_nodes_in_group("pump"):
 		out["pump"] = [pm.state, snappedf(pm.valve, 0.05), pm.loose_joints.size()]
 	print("PROBE ", JSON.stringify(out))

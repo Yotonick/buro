@@ -23,6 +23,7 @@ const ACTIONS := [
 	["flop", "Упасть"],
 	["laugh", "Ржать"],
 	["respawn", "Встать на место"],
+	["tablet", "Планшет"],
 ]
 ## Действия, которые не переназначаются (Esc всегда выход в паузу и отмена).
 const FIXED := ["pause"]
@@ -39,6 +40,7 @@ const DEFAULTS := {
 	"flop": ["key:%d" % KEY_F, ""],
 	"laugh": ["key:%d" % KEY_T, ""],
 	"respawn": ["key:%d" % KEY_R, ""],
+	"tablet": ["key:%d" % KEY_TAB, ""],
 	"pause": ["key:%d" % KEY_ESCAPE, ""],
 	"grab_left": ["mouse:%d" % MOUSE_BUTTON_LEFT, ""],
 	"grab_right": ["mouse:%d" % MOUSE_BUTTON_RIGHT, ""],

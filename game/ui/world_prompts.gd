@@ -60,6 +60,8 @@ func _gather() -> Array:
 		return []
 	if hud != null and hud.has_method("is_paused") and hud.is_paused():
 		return []
+	if hud != null and hud.has_method("tablet_open") and hud.tablet_open():
+		return []
 	var k: Kombez = world.local_kombez
 	if k == null or not is_instance_valid(k) or k.is_ko():
 		return []

@@ -9,6 +9,7 @@ const SettingsMenu := preload("res://ui/settings_menu.gd")
 const PromptsScript := preload("res://ui/world_prompts.gd")
 const OverlayScript := preload("res://ui/world_overlay.gd")
 const KeyCap := preload("res://ui/theme/key_cap.gd")
+const TabletScript := preload("res://ui/tablet.gd")
 
 const TIP_TIME := 8.0
 const TIP_MAX := 2              ## одновременно на экране
@@ -16,6 +17,10 @@ const TIP_MAX := 2              ## одновременно на экране
 ## Какие советы уже показывали (за запуск игры) — второй раз не надоедаем.
 static var _seen_tips := {}
 
+signal tablet_toggled(open: bool)
+
+var level: Node                 ## уровень (level_base.gd) — планшет берёт у него заказ и бригаду
+var tablet: Control             ## tablet.gd
 var prompts: Control            ## world_prompts.gd
 var overlay: Control            ## world_overlay.gd
 var line_hidden := false        ## говорящий на экране — пузырь вместо строки внизу
@@ -61,6 +66,11 @@ func _ready() -> void:
 	dot.offset_bottom = 2
 	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(dot)
+
+	tablet = TabletScript.new()
+	tablet.hud = self
+	tablet.toggled.connect(_on_tablet)
+	_root.add_child(tablet)
 
 	_pause = ColorRect.new()
 	(_pause as ColorRect).color = Color(0.05, 0.1, 0.15, 0.7)
@@ -135,7 +145,7 @@ func _controls_card() -> Control:
 	box.add_child(moves)
 	for pair in [["grab_left", "левая рука"], ["grab_right", "правая рука"], ["jump", "прыжок"],
 			["use", "использовать / на пояс"], ["drop_tool", "бросить инструмент"], ["crouch", "присесть"],
-			["flop", "упасть"], ["laugh", "ржать"], ["respawn", "встать на место"]]:
+			["flop", "упасть"], ["laugh", "ржать"], ["respawn", "встать на место"], ["tablet", "планшет"]]:
 		box.add_child(Style.key_hint(pair[0], pair[1], 18))
 	return card
 
@@ -175,6 +185,9 @@ func _show_tip(text: String, sec: float) -> void:
 
 func _tick_tips(dt: float) -> void:
 	_tip_cd -= dt
+	# планшет в руках закрывает правый верх — стикеры отходят в сторону и бледнеют
+	var away: bool = tablet != null and tablet.open
+	_tips.modulate.a = move_toward(_tips.modulate.a, 0.0 if away else 1.0, dt * 6.0)
 	if not Settings.show_hints:
 		_tip_queue.clear()
 	var live := 0
@@ -198,6 +211,10 @@ func _process(dt: float) -> void:
 		_line_left -= dt
 		_line.modulate.a = clampf(_line_left / 0.5, 0.0, 1.0)
 	_line.visible = _line_left > 0.0 and not line_hidden
+	# планшет закрывает низ экрана — реплика переезжает наверх
+	var top: float = -_root.size.y + 40.0 if tablet.open else -170.0
+	_line.offset_top = top
+	_line.offset_bottom = top + 60.0
 	if _banner_left > 0.0:
 		_banner_left -= dt
 		if _banner_left <= 0.0:
@@ -283,12 +300,39 @@ func is_paused() -> bool:
 func set_paused(v: bool) -> void:
 	if not v and is_instance_valid(settings_menu):
 		settings_menu.close()
+	if v and tablet.open:
+		tablet.set_open(false)
 	_pause.visible = v
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if v else Input.MOUSE_MODE_CAPTURED
 
+## Планшет в руках (подсказки у прицела в это время прячутся).
+func tablet_open() -> bool:
+	return tablet.open
+
+func set_tablet(v: bool) -> void:
+	if v and is_paused():
+		return
+	if level != null and "level" in tablet:
+		tablet.level = level
+	tablet.set_open(v)
+
+func _on_tablet(open: bool) -> void:
+	if not is_paused():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
+	tablet_toggled.emit(open)
+
+## Tab ловим раньше интерфейса: иначе он уходит на переход фокуса между кнопками.
+func _input(e: InputEvent) -> void:
+	if e.is_action_pressed("tablet") and not e.is_echo() and not is_paused():
+		set_tablet(not tablet.open)
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e.is_action_pressed("pause"):
-		set_paused(not is_paused())
+		if tablet.open:
+			set_tablet(false)
+		else:
+			set_paused(not is_paused())
 		get_viewport().set_input_as_handled()
 
 func _to_menu() -> void:
