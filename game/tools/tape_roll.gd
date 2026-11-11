@@ -115,6 +115,24 @@ func detach(toss := false) -> void:
 		reset_physics_interpolation()
 	_sync()
 
+## Подсказка, когда на рулон смотрят (лежит или в чужой руке).
+func prompt_hint(_k: Node, dist: float) -> Array:
+	if holder_id != 0 or dist > AIM_REACH:
+		return []
+	return [["use", "на пояс"], [["grab_left", "grab_right"], "взять в руку", true]]
+
+## Подсказка своему игроку, пока рулон у него на поясе (колечко считается в _process).
+func belt_hint(k: Node) -> Array:
+	if holder_id == 0 or _world == null or _world.node_of(holder_id) != k:
+		return []
+	if left < 0.05:
+		return [["drop_tool", "рулон кончился — бросить"]]
+	if _mark.visible:
+		return [["use", "примотать сюда" if end_on else "приклеить конец"]]
+	if end_on:
+		return [["", "тяни ленту ко второму предмету (до %d м)" % int(minf(MAX_SPAN, left))]]
+	return []
+
 func _cyl(radius: float, height: float, color: Color, rough: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()

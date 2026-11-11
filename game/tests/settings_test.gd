@@ -125,11 +125,16 @@ func _run() -> void:
 	var hud: CanvasLayer = load("res://ui/game_hud.gd").new()
 	add_child(hud)
 	await _frames(1)
-	hud.set_hint("подсказка")
 	m._hints.button_pressed = false
-	_check("выключили подсказки — строка спряталась", not hud._hint.visible)
+	hud.tip("t_off", "совет при выключенных подсказках")
+	await _frames(3)
+	_check("выключили подсказки — советы не показываются", hud.tips_shown().is_empty())
 	m._hints.button_pressed = true
-	_check("включили — видна", hud._hint.visible)
+	hud.tip("t_on", "совет")
+	await _frames(3)
+	hud.tip("t_on", "совет")
+	await _frames(90)
+	_check("включили — совет-стикер показан один раз", hud.tips_shown() == ["совет"], str(hud.tips_shown()))
 
 	# --- Графика ---
 	m.tabs.current_tab = 1

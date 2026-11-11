@@ -119,7 +119,9 @@ func build(level: Node3D, xf: Transform3D) -> void:
 	_box_mesh(level, Vector3(0.04, 0.04, 0.16), dark, Transform3D(b, o + b.z * 0.23 + Vector3.UP * HOOK_Y))
 	_box_mesh(level, Vector3(0.12, 0.12, 0.08), dark, Transform3D(b, anchor))
 	var yaw := atan2(b.z.x, b.z.z)
-	Kit.sign(level, o + b.z * 0.2 + Vector3.UP * 2.2, "КРЮК ДЛЯ ЩИТКА ↓", yaw, 30)
+	# табличка сбоку от стойки (по центру идёт кабель), стрелка — наискось на крюк
+	Kit.plaque(level, o + b.z * 0.17 + b.x * 0.42 + Vector3.UP * 2.3, "КРЮК ДЛЯ ЩИТКА", yaw, 0.08, {"style": "signal"})
+	Kit.arrow_down(level, o + b.z * 0.2 + b.x * 0.2 + Vector3.UP * 2.06, 0.16, Color("f2a81d"), yaw).rotation.z = -PI / 4
 
 	# тумба, на которой стоит щиток (низко — вода доберётся)
 	Kit.block(level, o + b.z * 1.0 + Vector3.UP * STAND_H * 0.5, Vector3(0.9, STAND_H, 0.6), _mat(Color("4a5257"), 0.8, 0.1)).global_basis = b
@@ -132,6 +134,16 @@ func build(level: Node3D, xf: Transform3D) -> void:
 	panel.continuous_cd = true
 	panel.angular_damp = 1.5
 	panel.add_to_group("switchboard")
+	panel.set_meta("prompt", func(_k, d: float) -> Array:
+		if d > 2.4:
+			return []
+		if short:
+			return [[["grab_left", "grab_right"], "подними щиток и повесь на крюк"]]
+		if fuse_in.has(false):
+			return [["", "пробки выбило — найди в зале и вставь в гнёзда"]]
+		if not lever_on:
+			return [[["grab_left", "grab_right"], "рубильник — вверх"]]
+		return [[["grab_left", "grab_right"], "схватить щиток (60 кг, вдвоём легче)", true]])
 	panel.set_meta("half", PANEL_SIZE.y * 0.5)
 	panel.set_meta("float", 0.35)   # железный — не всплывает
 	var pm := PhysicsMaterial.new()
@@ -144,12 +156,11 @@ func build(level: Node3D, xf: Transform3D) -> void:
 	panel.add_child(cs)
 	_box_mesh(panel, PANEL_SIZE, _mat(Color("c9b84a"), 0.6, 0.3), Transform3D.IDENTITY)
 	_box_mesh(panel, Vector3(0.6, 0.28, 0.02), _mat(Color("e9e4cf"), 0.7, 0.0), Transform3D(Basis.IDENTITY, Vector3(0, 0.17, 0.141)))
-	# молния на дверце
-	var bolt := Kit.sign(panel, Vector3(-0.25, -0.2, 0.145), "⚡", 0.0, 60)
-	bolt.modulate = Color("1d1d1d")
-	bolt.outline_size = 0
-	Kit.sign(panel, Vector3(0, 0.36, 0.145), "ЩИТОК", 0.0, 34)
-	_label = Kit.sign(panel, Vector3(0, -0.02, 0.15), "", 0.0, 22)
+	# молния на дверце, шильдик и табло
+	Kit.decal(panel, PackedVector2Array([Vector2(0.01, 0.06), Vector2(-0.035, -0.004), Vector2(-0.004, -0.004),
+		Vector2(-0.02, -0.06), Vector2(0.035, 0.008), Vector2(0.004, 0.008)]), Color("1d1d1d"), Vector3(-0.27, -0.27, 0.1415))
+	Kit.plaque(panel, Vector3(-0.06, 0.345, 0.14), "ЩИТОК", 0.0, 0.05, {"style": "navy"})
+	_label = Kit.screen(panel, Vector3(-0.08, -0.08, 0.14), 0.4, 0.17, 0.0, 0.026)
 	# розетки внизу — до них доберётся вода
 	for sx in [-0.12, 0.08]:
 		_box_mesh(panel, Vector3(0.13, 0.11, 0.02), _mat(Color("f2efe6"), 0.6, 0.0), Transform3D(Basis.IDENTITY, CONTACTS + Vector3(sx, 0, 0)))
@@ -199,6 +210,12 @@ func build(level: Node3D, xf: Transform3D) -> void:
 	lever.collision_mask = 1 | 2 | 8
 	lever.angular_damp = 3.0
 	lever.add_to_group("breaker")
+	lever.set_meta("prompt", func(_k, d: float) -> Array:
+		if d > 2.2 or lever_on:
+			return []
+		if latch_ok:
+			return [[["grab_left", "grab_right"], "поднять рубильник"]]
+		return [[["grab_left", "grab_right"], "поднять рубильник и держать"], ["use", "или примотать лентой к щитку"]])
 	var red := _mat(Color("b8322a"), 0.5, 0.2)
 	_box_mesh(lever, Vector3(0.04, 0.26, 0.04), steel, Transform3D(Basis.IDENTITY, Vector3(0, 0.13, 0)))
 	var knob := MeshInstance3D.new()
@@ -233,6 +250,11 @@ func build(level: Node3D, xf: Transform3D) -> void:
 		f.collision_mask = Kit.PROP_MASK
 		f.continuous_cd = true
 		f.add_to_group("fuse")
+		var fi := i
+		f.set_meta("prompt", func(_k, d: float) -> Array:
+			if d > 2.2 or fuse_in[fi]:
+				return []
+			return [[["grab_left", "grab_right"], "пробка: поднеси к пустому гнезду щитка"]])
 		f.set_meta("half", FUSE_R)
 		f.set_meta("float", 1.4)
 		var fcs := CollisionShape3D.new()
@@ -606,18 +628,18 @@ func _show() -> void:
 		return
 	var lines: Array = []
 	if short:
-		lines = ["КОРОТКОЕ! вода в щитке", "повесь щиток на крюк повыше"]
+		lines = ["КОРОТКОЕ!", "вода в щитке —", "повесь на крюк"]
 	else:
 		var missing := fuse_in.count(false)
 		lines.append("СВЕТ: %d/3" % lit_sectors())
 		if not lever_on:
-			lines.append("рубильник ВЫКЛ — подними вверх")
+			lines.append("рубильник ВЫКЛ — вверх")
 			if not latch_ok:
-				lines.append("(сам падает: держи или примотай)")
+				lines.append("(падает: держи/примотай)")
 		if missing > 0:
-			lines.append("нет пробок: %d — вставь в гнёзда" % missing)
+			lines.append("нет пробок: %d" % missing)
 		if _flood != null and contacts_y() - (_flood.floor_y + _flood.level) < SPARE_ABOVE and _flood.level > 0.01:
-			lines.append("вода у розеток!")
+			lines.append("ВОДА У РОЗЕТОК!")
 	_label.text = "\n".join(lines)
 	_lamp_mat.albedo_color = Color("d23a2a") if short else (Color("4fd65a") if powered() else Color("5a2a24"))
 

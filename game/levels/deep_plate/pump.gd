@@ -89,6 +89,15 @@ func build(level: Node3D, xf: Transform3D, pieces_at: Array) -> void:
 	pump_body.add_child(cs)
 	level.add_child(pump_body)
 	pump_body.global_transform = Transform3D(xf.basis, body_c)
+	pump_body.set_meta("prompt", func(_k, d: float) -> Array:
+		if d > 2.6:
+			return []
+		match state:
+			St.BROKEN:
+				return [["", "насосу нужна целая труба от приямка"]]
+			St.CLOSED:
+				return [[["grab_left", "grab_right"], "штурвал — против часовой"]]
+		return [])
 	_motor = Node3D.new()
 	pump_body.add_child(_motor)
 	var model: Node3D = load("res://assets/factory/machine.glb").instantiate()
@@ -113,7 +122,9 @@ func build(level: Node3D, xf: Transform3D, pieces_at: Array) -> void:
 	_static_pipe(level, sump + right * 0.45 + Vector3.DOWN * FLANGE_R, sump + right * 0.45, rust)
 	_static_pipe(level, sump + right * 0.45, sump, rust)
 	_flange(level, sump, -right, dark)
-	Kit.sign(level, sump + right * 0.45 + Vector3.UP * 0.55, "ПРИЯМОК", atan2(xf.basis.z.x, xf.basis.z.z), 30)
+	var face_yaw := atan2(xf.basis.z.x, xf.basis.z.z)
+	Kit.plaque(level, sump + right * 0.45 + back * 0.45 + Vector3.UP * (0.75 - FLANGE_R), "ПРИЯМОК", face_yaw, 0.1,
+		{"style": "signal", "mount": "post", "floor": xf.origin.y})
 	# выброс: труба из насоса вверх и сквозь стекло наружу
 	var top := body_c + Vector3.UP * 0.55
 	var up_to := top + Vector3.UP * 1.3
@@ -144,8 +155,9 @@ func build(level: Node3D, xf: Transform3D, pieces_at: Array) -> void:
 	_lamp.material_override = _lamp_mat
 	level.add_child(_lamp)
 	_lamp.global_position = top + Vector3.UP * 0.12 + xf.basis.z * 0.3
-	_label = Kit.sign(level, top + Vector3.UP * 0.6 + xf.basis.z * 0.3, "", atan2(xf.basis.z.x, xf.basis.z.z), 34)
-	Kit.sign(level, top + Vector3.UP * 1.0 + xf.basis.z * 0.3, "НАСОС ОТКАЧКИ", atan2(xf.basis.z.x, xf.basis.z.z), 44)
+	# табло — экранчик на стояке выброса, над ним — табличка
+	_label = Kit.screen(level, top + Vector3.UP * 0.5 + xf.basis.z * PIPE_R, 0.86, 0.4, face_yaw, 0.064)
+	Kit.plaque(level, top + Vector3.UP * 1.05 + xf.basis.z * PIPE_R, "НАСОС ОТКАЧКИ", face_yaw, 0.12)
 
 	# штурвал вентиля — на лицевой стороне корпуса, физический, крутится на оси
 	wheel_axis = xf.basis.z
@@ -156,6 +168,12 @@ func build(level: Node3D, xf: Transform3D, pieces_at: Array) -> void:
 	wheel.collision_mask = 1 | 2 | 4 | 8
 	wheel.angular_damp = 5.0
 	wheel.add_to_group("valve")
+	wheel.set_meta("prompt", func(_k, d: float) -> Array:
+		if d > 2.2:
+			return []
+		if state == St.BROKEN:
+			return [["", "сначала собери трубу"]]
+		return [[["grab_left", "grab_right"], "схвати и крути против часовой" if state == St.CLOSED else "по часовой — закрыть"]])
 	var red := _mat(Color("b8322a"), 0.5, 0.2)
 	var rim := MeshInstance3D.new()
 	var tm := TorusMesh.new()
@@ -379,13 +397,13 @@ func _show() -> void:
 	var real_loose := loose_joints
 	match state:
 		St.BROKEN:
-			_label.text = "труба разорвана\nсобери 3 куска, стыки примотай"
+			_label.text = "ТРУБА РАЗОРВАНА\nуложи 3 куска от приямка, стыки примотай"
 			_lamp_mat.albedo_color = Color("d23a2a")
 		St.CLOSED:
-			_label.text = "труба собрана\nкрути вентиль против часовой (%d%%)" % int(valve * 100.0)
+			_label.text = "ТРУБА СОБРАНА\nвентиль против часовой: %d%%" % int(valve * 100.0)
 			_lamp_mat.albedo_color = Color("e8b52a")
 		St.RUNNING:
-			_label.text = "КАЧАЕТ" + ("" if real_loose.is_empty() else "\nно брызжет (%d)" % real_loose.size())
+			_label.text = "КАЧАЕТ" + ("" if real_loose.is_empty() else "\nно брызжет: %d стык(а)" % real_loose.size())
 			_lamp_mat.albedo_color = Color("4fd65a") if real_loose.is_empty() else Color("b7d64f")
 	_bubbles.emitting = state == St.RUNNING
 
@@ -408,6 +426,12 @@ func _make_piece(rust: Material, dark: Material) -> RigidBody3D:
 	p.collision_mask = 1 | 2 | 4 | 8
 	p.continuous_cd = true
 	p.add_to_group("pipe")
+	p.set_meta("prompt", func(_k, d: float) -> Array:
+		if d > 2.2:
+			return []
+		if state != St.BROKEN:
+			return [[["grab_left", "grab_right"], "схватить трубу", true]]
+		return [[["grab_left", "grab_right"], "уложи от приямка к насосу"], ["use", "стыки — примотать лентой"]])
 	p.set_meta("half", FLANGE_R)
 	p.set_meta("float", 0.25)   # чугун: в воде не всплывает
 	var pm := PhysicsMaterial.new()

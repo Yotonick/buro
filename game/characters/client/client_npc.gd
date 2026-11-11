@@ -49,7 +49,6 @@ var _vis: Node3D
 var _head_mat: ShaderMaterial
 var _legs: Array[Node3D] = []
 var _arm_r: Node3D
-var _label: Label3D
 var _face := ""
 var _blink_in := 2.0
 var _blink_left := 0.0
@@ -72,6 +71,7 @@ static func create(level: Node3D, at: Vector3, yaw: float) -> AnimatableBody3D:
 
 func _init() -> void:
 	sync_to_physics = true
+	set_meta("prompt", [["", "метрдотель. Руками не трогать!"]])
 	collision_layer = 0
 	collision_mask = 0
 	var cs := CollisionShape3D.new()
@@ -96,6 +96,7 @@ func _init() -> void:
 	add_child(area)
 
 func _ready() -> void:
+	add_to_group("speaker")
 	_world = get_tree().get_first_node_in_group("net_world")
 	_last_pos = global_position
 	_apply_active()
@@ -153,6 +154,17 @@ func act(what: String) -> void:
 	_act_n += 1
 	_sync()
 
+# --- пузырь с репликой: рисует интерфейс (ui/world_overlay.gd, группа "speaker") ---
+
+func speech_text() -> String:
+	return _say_text if _say_left > 0.0 and active else ""
+
+func speech_anchor() -> Vector3:
+	return get_global_transform_interpolated().origin + Vector3.UP * (HEAD_Y + 0.42)
+
+func speech_alpha() -> float:
+	return clampf(_say_left / 0.4, 0.0, 1.0)
+
 func last_line() -> String:
 	return _say_text
 
@@ -186,7 +198,6 @@ func _show_say_if_new() -> void:
 
 func _show_say() -> void:
 	_shown_say = _say_n
-	_label.text = _say_text
 	_say_left = SAY_TIME if _say_text != "" else 0.0
 	var lvl := get_parent()
 	if _say_text != "" and lvl != null and "hud" in lvl and lvl.hud != null and lvl.hud.has_method("show_line"):
@@ -259,7 +270,6 @@ func _process(dt: float) -> void:
 	_set_face(f)
 	# реплика
 	_say_left -= dt
-	_label.visible = _say_left > 0.0
 	# ноги: шаг по скорости
 	var moving := clampf(_speed / SPEED, 0.0, 1.0)
 	_step += dt * _speed * 4.2
@@ -423,21 +433,6 @@ func _build_visual() -> void:
 	mono.position = Vector3(-0.07, HEAD_Y + 0.045, -0.2)
 	mono.rotation.x = PI / 2
 	_vis.add_child(mono)
-	# пузырь с репликой
-	_label = Label3D.new()
-	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.font_size = 40
-	_label.outline_size = 12
-	_label.pixel_size = 0.0045
-	_label.modulate = Color("fff6e0")
-	_label.outline_modulate = Color("2a1a14")
-	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label.width = 620.0
-	_label.position = Vector3(0, 2.45, 0)
-	_label.no_depth_test = true
-	_label.visible = false
-	_label.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	add_child(_label)
 
 static func _mat(c: Color, rough := 0.7) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()

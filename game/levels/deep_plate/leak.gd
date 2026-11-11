@@ -34,6 +34,7 @@ var _t := 0.0
 func _ready() -> void:
 	add_to_group("leak")
 	add_to_group("tape_hint")
+	add_to_group("prompt_near")
 	_world = get_tree().get_first_node_in_group("net_world")
 	_crack = MeshInstance3D.new()
 	var q := QuadMesh.new()
@@ -104,6 +105,14 @@ func inward() -> Vector3:
 ## Для изоленты: подсвечивать ли колечко на стекле в этой точке.
 func wants_tape(p: Vector3) -> bool:
 	return state != S.WHOLE and p.distance_to(global_position) < 0.6
+
+## Всплывающая подсказка, когда стоишь рядом с открытой течью.
+func near_hint(k: Node3D) -> Array:
+	if (state != S.OPEN and state != S.DRIP) or k.global_position.distance_to(global_position) > 2.6:
+		return []
+	if state == S.DRIP:
+		return [["use", "сочится — ещё полоску ленты поперёк"]]
+	return [[["grab_left", "grab_right"], "прижми к дыре что угодно"], ["use", "или заклей лентой: 3 полоски"]]
 
 func net_state(d: Dictionary) -> void:
 	state = int(d.get("s", S.WHOLE)) as S

@@ -1,11 +1,28 @@
 extends CanvasLayer
-## Игровой интерфейс поверх мира: подсказка по управлению и пауза (Esc).
+## Игровой интерфейс поверх мира: прицел, всплывающие подсказки по месту (world_prompts.gd),
+## стикеры-советы (tip), имена и пузыри (world_overlay.gd), большая табличка итога и пауза (Esc).
 ## Мир на паузе не останавливается — просто отпускается мышь.
+## Висящего текста по управлению больше нет: клавиши — в подсказках и в паузе.
 
 const Style := preload("res://ui/ui_style.gd")
 const SettingsMenu := preload("res://ui/settings_menu.gd")
+const PromptsScript := preload("res://ui/world_prompts.gd")
+const OverlayScript := preload("res://ui/world_overlay.gd")
+const KeyCap := preload("res://ui/theme/key_cap.gd")
 
-var _hint: Label
+const TIP_TIME := 8.0
+const TIP_MAX := 2              ## одновременно на экране
+
+## Какие советы уже показывали (за запуск игры) — второй раз не надоедаем.
+static var _seen_tips := {}
+
+var prompts: Control            ## world_prompts.gd
+var overlay: Control            ## world_overlay.gd
+var line_hidden := false        ## говорящий на экране — пузырь вместо строки внизу
+
+var _tips: VBoxContainer
+var _tip_queue: Array = []
+var _tip_cd := 0.0
 var _pause: Control
 var _root: Control
 var _banner: VBoxContainer
@@ -20,10 +37,20 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
 
-	_hint = Style.outlined(Style.label("", 16, Style.TEXT), 6)
-	_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
-	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_root.add_child(_hint)
+	overlay = OverlayScript.new()
+	overlay.hud = self
+	_root.add_child(overlay)
+	prompts = PromptsScript.new()
+	prompts.hud = self
+	_root.add_child(prompts)
+	_tips = VBoxContainer.new()
+	_tips.add_theme_constant_override("separation", 14)
+	_tips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tips.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_tips.offset_left = -360
+	_tips.offset_right = -28
+	_tips.offset_top = 96
+	_root.add_child(_tips)
 
 	var dot := ColorRect.new()   # точка прицела: туда тянутся руки и клеится лента
 	dot.color = Color(1, 1, 1, 0.75)
@@ -69,8 +96,6 @@ func _ready() -> void:
 	box.add_child(quit)
 	row.add_child(_controls_card())
 	set_paused(false)
-	Settings.changed.connect(_on_settings)
-	_on_settings()
 
 	_banner = VBoxContainer.new()
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -114,11 +139,65 @@ func _controls_card() -> Control:
 		box.add_child(Style.key_hint(pair[0], pair[1], 18))
 	return card
 
+## Мир, с которым работают подсказки и имена (уровень зовёт сразу после создания HUD).
+func attach_world(w: Node) -> void:
+	prompts.world = w
+	overlay.world = w
+
+## Стикер-совет справа сверху: id — чтобы не повторять; показывается один раз за запуск.
+## С выключенными подсказками не показывается (и не считается показанным).
+func tip(id: String, text: String, sec := TIP_TIME) -> void:
+	if _seen_tips.has(id) or not Settings.show_hints:
+		return
+	_seen_tips[id] = true
+	_tip_queue.append([text, sec])
+
+## Подпись клавиши действия из текущей раскладки — для текста советов («E», «ЛКМ»…).
+static func key_name(action: String) -> String:
+	return KeyCap.action_label(action)
+
+## Тексты советов, которые сейчас на экране (для тестов).
+func tips_shown() -> Array:
+	var out: Array = []
+	for c in _tips.get_children():
+		if not c.is_queued_for_deletion():
+			out.append(str(c.get_meta("text", "")))
+	return out
+
+func _show_tip(text: String, sec: float) -> void:
+	var st := Style.sticker(text, randf_range(-3.0, 1.5), 290, 25)
+	st.size_flags_horizontal = Control.SIZE_SHRINK_END
+	st.set_meta("text", text)
+	st.set_meta("left", sec)
+	st.modulate.a = 0.0
+	_tips.add_child(st)
+	UiSound.play("paper")
+
+func _tick_tips(dt: float) -> void:
+	_tip_cd -= dt
+	if not Settings.show_hints:
+		_tip_queue.clear()
+	var live := 0
+	for c in _tips.get_children():
+		if c.is_queued_for_deletion():
+			continue
+		live += 1
+		var left: float = c.get_meta("left") - dt
+		c.set_meta("left", left)
+		c.modulate.a = clampf(minf(left / 0.6, c.modulate.a + dt * 4.0), 0.0, 1.0)
+		if left <= 0.0 or not Settings.show_hints:
+			c.queue_free()
+	if not _tip_queue.is_empty() and live < TIP_MAX and _tip_cd <= 0.0:
+		var t: Array = _tip_queue.pop_front()
+		_show_tip(t[0], t[1])
+		_tip_cd = 1.2
+
 func _process(dt: float) -> void:
+	_tick_tips(dt)
 	if _line_left > 0.0:
 		_line_left -= dt
 		_line.modulate.a = clampf(_line_left / 0.5, 0.0, 1.0)
-		_line.visible = _line_left > 0.0
+	_line.visible = _line_left > 0.0 and not line_hidden
 	if _banner_left > 0.0:
 		_banner_left -= dt
 		if _banner_left <= 0.0:
@@ -131,8 +210,9 @@ func show_line(text: String, sec := 4.0) -> void:
 	_line.modulate.a = 1.0
 	_line.visible = true
 
+## Последняя реплика, пока не погасла (видна строкой внизу или пузырём над говорящим).
 func line_text() -> String:
-	return _line.text if _line.visible else ""
+	return _line.text if _line_left > 0.0 else ""
 
 ## Большая табличка по центру сверху: итог смены и т.п.
 ## stars ≥ 0 — ряд из пяти звёзд под заголовком; hide_after > 0 — спрятать через столько секунд.
@@ -187,12 +267,6 @@ func banner_text() -> String:
 		if c is Label and not c.is_queued_for_deletion():
 			parts.append(c.text)
 	return " / ".join(parts) if _banner.visible else ""
-
-func set_hint(text: String) -> void:
-	_hint.text = text
-
-func _on_settings() -> void:
-	_hint.visible = Settings.show_hints
 
 var settings_menu: Control
 

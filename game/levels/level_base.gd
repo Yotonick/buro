@@ -22,11 +22,13 @@ var player: Kombez             ## свой персонаж (у клиента �
 var camera: Node3D
 var controller: Node
 var hud: CanvasLayer
-var hint := ""
+## Советы-стикеры в начале смены: [[id, текст], …] — уровень заполняет в _build().
+## Остальные советы уровень показывает сам по событиям: hud.tip(id, текст).
+var intro_tips: Array = []
 
 var _players := {}             ## peer -> Kombez
 var _slots := {}               ## peer -> номер места (цвет, точка появления)
-var _tags := {}                ## peer -> Label3D с именем
+var _tip_t := 0.0
 
 # --- переопределяется уровнем ---
 
@@ -63,7 +65,9 @@ func _ready() -> void:
 	add_child(controller)
 	hud = HudScript.new()
 	add_child(hud)
-	hud.set_hint(hint)
+	hud.attach_world(world)
+	for t in intro_tips:
+		hud.tip(t[0], t[1], 10.0)
 
 	if world.is_authority():
 		if Net.in_session():
@@ -108,19 +112,8 @@ func _on_spawned(node: Node, kind: String, params: Dictionary) -> void:
 		camera.snap()
 		controller.kombez = k
 		world.local_kombez = k
-	elif k.player_name != "":
-		var tag := Kit.sign(self, k.position + Vector3.UP * 1.3, k.player_name, 0.0, 40)
-		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		tag.double_sided = false
-		tag.modulate = k.suit_color.lightened(0.55)
-		tag.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-		_tags[k.peer_id] = tag
 
 func _remove_player(id: int) -> void:
-	var tag: Node = _tags.get(id)
-	if tag != null:
-		tag.queue_free()
-	_tags.erase(id)
 	var k: Kombez = _players.get(id)
 	_players.erase(id)
 	_slots.erase(id)
@@ -144,8 +137,18 @@ func _physics_process(dt: float) -> void:
 			k.teleport(spawn_point(_slots.get(peer, 0)))
 	_tick(dt)
 
-func _process(_dt: float) -> void:
-	for peer in _tags:
-		var k: Kombez = _players.get(peer)
-		if is_instance_valid(k):
-			_tags[peer].global_position = k.get_global_transform_interpolated().origin + Vector3.UP * 1.3
+func _process(dt: float) -> void:
+	_tip_t -= dt
+	if _tip_t <= 0.0:
+		_tip_t = 0.5
+		_check_tips()
+
+## Советы по событиям — смотрит каждые полсекунды (у всех: состояние приходит по сети).
+## Уровень может дополнить, вызвав super().
+func _check_tips() -> void:
+	if not is_instance_valid(player):
+		return
+	for t in get_tree().get_nodes_in_group("tool"):
+		if t.get("holder_id") and world.node_of(t.holder_id) == player:
+			hud.tip("belt", "Рулон на поясе, руки свободны. %s — клеить туда, куда смотришь: раз — конец, второй раз — примотал. %s — бросить рулон."
+				% [hud.key_name("use"), hud.key_name("drop_tool")])

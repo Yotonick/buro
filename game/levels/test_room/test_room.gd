@@ -14,7 +14,9 @@ func spawn_point(slot: int) -> Vector3:
 func _build() -> void:
 	_build_world()
 	_build_playthings()
-	hint = "WASD — идти   ·   Пробел — прыжок   ·   ЛКМ / ПКМ — левая / правая рука (держи)   ·   мышь вверх-вниз — поднять-опустить руки\nCtrl — присесть   ·   E — взять рулон на пояс, дальше E — клеить ленту туда, куда смотришь (жёлтое колечко): раз — конец, второй раз — примотал   ·   Q — бросить рулон\nF — упасть   ·   T — ржать   ·   R — вернуться на старт   ·   Esc — пауза"
+	intro_tips = [["room_intro", "Полигон бюро: тут можно всё. Руки — %s и %s (держи), прыжок — %s, упасть — %s."
+			% [HudScript.key_name("grab_left"), HudScript.key_name("grab_right"), HudScript.key_name("jump"), HudScript.key_name("flop")]],
+		["room_tape", "Рулоны изоленты — на столе слева. Подойди и жми %s." % HudScript.key_name("use")]]
 
 func _tick(dt: float) -> void:
 	carousel.rotate_y(1.5 * dt)
@@ -67,13 +69,13 @@ func _build_world() -> void:
 	Kit.block(self, Vector3(-9, 1.2, -7.0), Vector3(4, 2.4, 4), concrete)            # верх 2.4
 	Kit.block(self, Vector3(-9, 2.3, -11.0), Vector3(4, 4.6, 4), concrete)           # верх 4.6
 	Kit.block(self, Vector3(-9, 4.65, -9.1), Vector3(4, 0.1, 0.2), accent)           # кромка — за неё цепляться
-	Kit.sign(self, Vector3(-9, 5.6, -11.0), "ВЫШКА\nпадать больно", 0.0)
+	Kit.plaque(self, Vector3(-9, 5.45, -9.6), "ВЫШКА\nпадать больно", 0.0, 0.24, {"style": "signal", "mount": "post", "floor": 4.6})
 	# стенка для лазания
 	Kit.block(self, Vector3(-2.5, 1.0, -8.0), Vector3(5, 2.0, 1.2), concrete)
-	Kit.sign(self, Vector3(-2.5, 2.6, -8.0), "Залезь руками", 0.0, 48)
+	Kit.plaque(self, Vector3(-2.5, 2.5, -7.75), "ЗАЛЕЗЬ РУКАМИ", 0.0, 0.18, {"mount": "post", "floor": 2.0})
 	# пандус
 	Kit.block(self, Vector3(-15, 0.75, 4), Vector3(3, 0.3, 8), concrete, Vector3(deg_to_rad(12), 0, 0))
-	Kit.sign(self, Vector3(0, 3.2, 2.5), "ПОЛИГОН БЮРО", 0.0, 96)
+	Kit.plaque(self, Vector3(0, 3.2, 2.5), "ПОЛИГОН БЮРО", 0.0, 0.42, {"mount": "legs", "solid": true, "both": true})
 
 func _build_playthings() -> void:
 	var wood := Color("c08a4e")
@@ -81,8 +83,8 @@ func _build_playthings() -> void:
 		Kit.prop_box(self, Vector3(5.0 + (i % 3) * 0.55, 0.26 + (i / 3) * 0.52, 3.0), Vector3.ONE * 0.5, 4.0, wood.lightened(0.1 * (i % 2)))
 	Kit.prop_box(self, Vector3(8, 0.36, 4), Vector3.ONE * 0.7, 14.0, Color("8a6a3a"))
 	Kit.prop_box(self, Vector3(9, 0.36, 5.2), Vector3.ONE * 0.7, 14.0, Color("8a6a3a"))
-	Kit.prop_box(self, Vector3(11, 0.5, 2), Vector3.ONE, 70.0, Color("5b6570"))
-	Kit.sign(self, Vector3(11, 1.5, 2), "70 кг", 0.0, 40)
+	var heavy := Kit.prop_box(self, Vector3(11, 0.5, 2), Vector3.ONE, 70.0, Color("5b6570"))
+	Kit.plaque(heavy, Vector3(0, 0.1, 0.5), "70 КГ", 0.0, 0.14, {"style": "signal"})
 	Kit.prop_box(self, Vector3(6, 0.1, 6.5), Vector3(3.0, 0.12, 0.4), 9.0, wood)
 	for i in 3:
 		Kit.prop_ball(self, Vector3(3.0 + i * 0.8, 0.4, 9.0), 0.3, 3.0, [Color("d85a30"), Color("1d9e75"), Color("ef9f27")][i])
@@ -94,7 +96,7 @@ func _build_playthings() -> void:
 		var roll: RigidBody3D = TapeRoll.create({})
 		roll.position = Vector3(-5.2 + i * 0.7, 0.86, 5.0)
 		add_child(roll)
-	Kit.sign(self, Vector3(-4.5, 1.7, 5.0), "ИЗОЛЕНТА\nвозьми и жми E", 0.0, 48)
+	Kit.plaque(self, Vector3(-4.5, 1.35, 4.62), "ИЗОЛЕНТА\nбери, сколько надо", 0.0, 0.12, {"style": "signal", "mount": "post", "floor": 0.8})
 
 	# груша для битья: висит на шарнире, раскачай и получи
 	var steel := Kit.mat(Color("5b6570"), 0.5)
@@ -105,7 +107,7 @@ func _build_playthings() -> void:
 	var chain := Kit.prop_cylinder(self, Vector3(7.0, 2.9, -6), 0.04, 1.3, 2.0, Color("333333"))
 	_pin(beam, chain, Vector3(7.0, 3.55, -6))
 	_pin(chain, bag, Vector3(7.0, 2.25, -6))
-	Kit.sign(self, Vector3(7.0, 4.2, -6), "Груша. Бьёт в ответ", 0.0, 48)
+	Kit.plaque(self, Vector3(5.95, 3.25, -5.875), "ГРУША\nбьёт в ответ", 0.0, 0.16, {"mount": "hang", "hang": 0.1})
 
 	# карусель: вращающаяся балка, сбивает с ног
 	Kit.block(self, Vector3(0, 0.45, -14), Vector3(0.5, 0.9, 0.5), steel)
@@ -115,7 +117,7 @@ func _build_playthings() -> void:
 	Kit._add_box(carousel, Vector3(7.0, 0.3, 0.3), Kit.mat(Color("d85a30")))
 	carousel.position = Vector3(0, 1.05, -14)
 	add_child(carousel)
-	Kit.sign(self, Vector3(0, 2.4, -14), "Карусель дураков", 0.0, 48)
+	Kit.plaque(self, Vector3(0, 1.3, -10.0), "КАРУСЕЛЬ ДУРАКОВ", 0.0, 0.16, {"style": "red", "mount": "post"})
 
 	# стажёры: их можно таскать за что попало и швырять
 	var colors := [Color("9aa3ab"), Net.PLAYER_COLORS[2]]
@@ -126,7 +128,7 @@ func _build_playthings() -> void:
 		d.rotation.y = PI
 		add_child(d)
 		dummies.append(d)
-	Kit.sign(self, Vector3(3.8, 2.3, 1.0), "Стажёры", PI, 40)
+	Kit.plaque(self, Vector3(3.8, 1.75, 0.2), "СТАЖЁРЫ\nне жалко", 0.0, 0.14, {"style": "paper", "mount": "post"})
 
 func _pin(a: PhysicsBody3D, b: PhysicsBody3D, at: Vector3) -> void:
 	var j := PinJoint3D.new()

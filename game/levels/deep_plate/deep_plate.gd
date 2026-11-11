@@ -74,12 +74,34 @@ func _build() -> void:
 	_build_board()
 	_build_maitre()
 	world.spawned.connect(_on_kombez_spawned)
-	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nЩиток: пробки — обратно в гнёзда, рубильник — вверх (падает — держи или примотай), вода у розеток — повесь щиток на крюк\nПосле смены — приёмка: метрдотель обходит зал (еда, посуда, свет, заплатки) и ставит звёзды\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
+	intro_tips = [["plate_intro", "Купол течёт! Затыкай дыры чем угодно и мотай изолентой. Вода дойдёт до столов — банкету конец."],
+		["plate_tools", "Изолента и заглушки — на стеллажах в шлюзе."]]
 
 func _on_kombez_spawned(node: Node, kind: String, _params: Dictionary) -> void:
 	if kind == "kombez":
 		node.set_meta("half", 0.75)
 		node.set_meta("float", 0.55)
+
+# ---------- советы-стикеры по событиям (у всех) ----------
+
+func _check_tips() -> void:
+	super()
+	if hud == null:
+		return
+	for l in leaks:
+		if l.is_burst() and l.flow() >= 1.0:
+			hud.tip("leak", "Течь! Прижми к дыре что угодно — заглушку, тарелку, ладонь — и примотай к стеклу лентой. Или заклей дыру крест-накрест: 3 полоски держат.")
+			break
+	if flood.level > 0.12 and pump.state == PumpScript.St.BROKEN:
+		hud.tip("pump", "Воды прибывает. Насос — у дальней стены: уложи 3 куска трубы от приямка до насоса, стыки примотай, штурвал — против часовой.")
+	if board.short:
+		hud.tip("short", "КОРОТКОЕ! Вода в щитке — бьёт током всех в воде. Подними щиток и повесь на крюк (вдвоём легче), а сам — на стол или стул.")
+	elif board.fuse_in.has(false):
+		hud.tip("fuse", "Скачок выбил пробку — она улетела в зал. Найди и поднеси к пустому гнезду щитка. Рубильник — вверх.")
+	if not board.latch_ok and not board.lever_on:
+		hud.tip("lever", "Защёлка рубильника сломалась: поднятый — падает. Держи рукой или примотай лентой к щитку.")
+	if shift.reviewing():
+		hud.tip("review", "Приёмка! Метрдотель смотрит столы, еду, посуду, свет и заплатки. Прибери стол до того, как он подойдёт, — и не попадайся ему под руку.", 10.0)
 
 # ---------- ход смены (только хост) ----------
 
@@ -302,8 +324,9 @@ func _build_airlock() -> void:
 		Kit.block(self, Vector3(s * (w / 2.0 + 0.15), 1.5, zc), Vector3(0.3, 3.0, z1 - z0), metal)
 	Kit.block(self, Vector3(0, 1.5, z1 + 0.15), Vector3(w + 0.6, 3.0, 0.3), metal)
 	Kit.block(self, Vector3(0, 2.95, R + 0.15), Vector3(w + 0.4, 0.5, 0.4), metal)   # притолока
-	Kit.sign(self, Vector3(0, 2.45, R + 0.4), "ШЛЮЗ №2 · СЛУЖЕБНЫЙ", 0.0, 44)
-	Kit.sign(self, Vector3(0, 2.0, z1 - 0.01), "БЮРО НЕВОЗМОЖНОГО РЕМОНТА\nвызов: «Глубокая тарелка», купол течёт", PI, 40)
+	Kit.plaque(self, Vector3(0, 2.42, R + 0.14), "ШЛЮЗ №2 · СЛУЖЕБНЫЙ", 0.0, 0.14,
+		{"style": "signal", "mount": "hang", "hang": 0.22, "both": true})
+	Kit.plaque(self, Vector3(0, 2.05, z1), "БЮРО НЕВОЗМОЖНОГО РЕМОНТА\nвызов: «Глубокая тарелка» · купол течёт", PI, 0.12)
 	var lamp := OmniLight3D.new()
 	lamp.position = Vector3(0, 2.7, zc)
 	lamp.light_color = Color("f4f0e0")
@@ -317,14 +340,15 @@ func _build_airlock() -> void:
 		var roll: RigidBody3D = TapeRoll.create({})
 		roll.position = Vector3(-1.45 + (i % 2) * 0.5, 0.86, z1 - 0.8 + (i / 2) * 0.4)
 		add_child(roll)
-	Kit.sign(self, Vector3(-1.2, 1.35, z1 - 0.6), "ИЗОЛЕНТА", PI, 36)
+	Kit.plaque(self, Vector3(-1.2, 1.3, z1), "ИЗОЛЕНТА", PI, 0.12, {"style": "signal"})
 	for i in 8:
 		var plug := Kit.prop_cylinder(self, Vector3(0.95 + (i % 3) * 0.25, 0.84 + (i / 3) * 0.07, z1 - 0.7 + (i % 2) * 0.2),
 			0.14, 0.06, 0.4, Color("b8322a"))
 		plug.add_to_group("plug")
+		plug.set_meta("prompt", [[["grab_left", "grab_right"], "заглушка: прижми к дыре и примотай"]])
 		plug.set_meta("half", 0.03)
 		plug.set_meta("float", 1.6)
-	Kit.sign(self, Vector3(1.2, 1.35, z1 - 0.6), "ЗАГЛУШКИ", PI, 36)
+	Kit.plaque(self, Vector3(1.2, 1.3, z1), "ЗАГЛУШКИ", PI, 0.12, {"style": "signal"})
 
 func _build_pump() -> void:
 	# куски трубы: два валяются у насосной, третий унесло в зал
@@ -366,9 +390,16 @@ func _build_hall() -> void:
 	mark.position = Vector3(0, TABLE_H, 0)
 	mark.rotation.y = PI / 4
 	add_child(mark)
-	for s in [0.0, PI / 2, PI, PI * 1.5]:
-		Kit.sign(self, Vector3(sin(s) * 0.68, TABLE_H + 0.18, cos(s) * 0.68), "вода до сюда — конец", s, 28)
-	Kit.sign(self, Vector3(0, 3.3, 0.7), "«ГЛУБОКАЯ ТАРЕЛКА»\nресторан на дне", 0.0, 64)
+	for s in [0.0, PI / 2, PI, PI * 1.5]:   # таблички на гранях колонны, над красной отметкой
+		var f: float = s + PI / 4
+		Kit.plaque(self, Vector3(sin(f) * 0.45, TABLE_H + 0.14, cos(f) * 0.45), "ВОДА ДО СЮДА —\nБАНКЕТУ КОНЕЦ", f, 0.06, {"style": "red"})
+	for s in [0.0, PI]:   # вывеска ресторана на кронштейнах колонны — к шлюзу и к насосной
+		var dir := Vector3(sin(float(s)), 0, cos(float(s)))
+		var main := Kit.plaque(self, dir * 0.76 + Vector3.UP * 3.0, "«ГЛУБОКАЯ ТАРЕЛКА»", s, 0.24,
+			{"style": "navy", "mount": "arm", "arm": 0.3})
+		var bottom: float = 3.0 - (main.get_parent().get_child(0) as MeshInstance3D).mesh.size.y * 0.5
+		Kit.plaque(self, dir * 0.76 + Vector3.UP * (bottom - 0.2), "ресторан на дне", s, 0.1,
+			{"style": "paper", "mount": "hang", "hang": 0.1})
 	center_light = OmniLight3D.new()
 	center_light.position = Vector3(0, 3.6, 0)
 	center_light.light_color = Color("ffd9a0")

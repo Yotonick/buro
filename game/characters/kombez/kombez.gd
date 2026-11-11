@@ -157,6 +157,12 @@ func hand_target(side: float, active: bool) -> Vector3:
 	var dir := Vector3(-side * 0.14, sin(pitch), -cos(pitch)).normalized()
 	return shoulder_global(side) + Basis(Vector3.UP, in_aim_yaw) * dir * 0.78
 
+## Подсказка тому, кто смотрит на этого Комбеза (напарник, стажёр).
+func prompt_hint(k: Node, dist: float) -> Array:
+	if k == self or dist > 2.2:
+		return []
+	return [[["grab_left", "grab_right"], "схватить коллегу" if peer_id > 0 else "схватить стажёра", true]]
+
 ## Точка на уровне глаз камеры и направление взгляда игрока — туда «целятся» инструменты с пояса.
 func aim_origin() -> Vector3:
 	return global_position + Vector3.UP * 0.7
