@@ -96,6 +96,12 @@ static func anchor(body: Node3D, local: Vector3, normal: Vector3, smooth: bool) 
 	var xf := body.get_global_transform_interpolated() if smooth else body.global_transform
 	return [xf * local, xf.basis * normal]
 
+## Где сейчас конец ленты в мире (first — конец A, иначе B).
+func end_point(first: bool) -> Vector3:
+	if first:
+		return anchor(_body(a_id), a_local, a_normal, false)[0]
+	return anchor(_body(b_id), b_local, b_normal, false)[0]
+
 func _physics_process(dt: float) -> void:
 	if puppet:
 		return

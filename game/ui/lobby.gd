@@ -33,10 +33,14 @@ func _ready() -> void:
 
 	if Net.is_host():
 		var start := Button.new()
-		start.text = "Начать смену (полигон)"
-		start.pressed.connect(func(): Game.start_match())
+		start.text = "Вызов: подводный ресторан «Глубокая тарелка»"
+		start.pressed.connect(func(): Game.start_match("deep_plate"))
 		box.add_child(start)
 		start.grab_focus()
+		var poly := Button.new()
+		poly.text = "Полигон (потренироваться)"
+		poly.pressed.connect(func(): Game.start_match("polygon"))
+		box.add_child(poly)
 	else:
 		box.add_child(Style.label("Ждём, когда хост начнёт смену…", 18, Style.MUTED))
 

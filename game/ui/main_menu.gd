@@ -53,6 +53,7 @@ func _ready() -> void:
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.custom_minimum_size = Vector2(0, 40)
 	box.add_child(_status)
+	box.add_child(_button("«Глубокая тарелка» (один, без сети)", func(): Game.open_level("deep_plate")))
 	box.add_child(_button("Полигон (один, без сети)", func(): Game.open_playground()))
 	box.add_child(_button("Выход", func(): get_tree().quit()))
 

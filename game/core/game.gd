@@ -1,13 +1,14 @@
 extends Node
 ## Поток игры: меню <-> лобби. Также разбирает аргументы командной строки
 ## (быстрый запуск и автотесты): -- --host | --join=IP [--port=N] [--name=X]
-## [--report-after=СЕК] [--quit-after=СЕК] | --playground | --probe (автотесты, см. tests/net_probe.gd)
+## [--report-after=СЕК] [--quit-after=СЕК] | --playground | --level=КЛЮЧ | --probe (автотесты, см. tests/net_probe.gd)
 
 const MENU := "res://ui/main_menu.tscn"
 const LOBBY := "res://ui/lobby.tscn"
 const PLAYGROUND := "res://levels/test_room/test_room.tscn"
 ## Уровни, на которые хост может отправить бригаду (по сети передаётся только ключ).
-const LEVELS := {"polygon": PLAYGROUND}
+const DEEP_PLATE := "res://levels/deep_plate/deep_plate.tscn"
+const LEVELS := {"polygon": PLAYGROUND, "deep_plate": DEEP_PLATE}
 
 ## Сообщение, которое меню покажет при следующем открытии (причина разрыва).
 var pending_message := ""
@@ -52,6 +53,31 @@ func _enter_level(level: String) -> void:
 	current_level = level
 	get_tree().change_scene_to_file(LEVELS[level])
 
+## Смена кончилась (или хост так решил): вся бригада — обратно в лобби.
+## В одиночной игре — в главное меню.
+func back_to_lobby() -> void:
+	if not Net.in_session():
+		current_level = ""
+		get_tree().change_scene_to_file(MENU)
+		return
+	if not Net.is_host() or current_level == "":
+		return
+	current_level = ""
+	_return_to_lobby.rpc()
+	get_tree().change_scene_to_file(LOBBY)
+
+@rpc("authority", "call_remote", "reliable")
+func _return_to_lobby() -> void:
+	if not Net.in_session():
+		return
+	current_level = ""
+	get_tree().change_scene_to_file(LOBBY)
+
+## Одиночная игра на уровне-вызове (без сети) — для обкатки.
+func open_level(level: String) -> void:
+	if LEVELS.has(level):
+		get_tree().change_scene_to_file(LEVELS[level])
+
 ## Кто подключился, когда смена уже идёт, — сразу попадает на уровень.
 func _on_player_joined(id: int) -> void:
 	if Net.is_host() and current_level != "":
@@ -75,6 +101,8 @@ func _apply_cmdline() -> void:
 		add_child(probe)
 	if args.has("playground"):
 		open_playground()
+	if args.has("level"):
+		open_level(str(args["level"]))
 	var player_name := str(args.get("name", Settings.player_name))
 	var port := int(args.get("port", Settings.port))
 	var err := ""

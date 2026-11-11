@@ -1,6 +1,9 @@
 extends Node
 ## Помощник сетевых автотестов (включается аргументом --probe, в обычной игре не участвует).
 ##   --autostart=N       хост начинает смену, когда в лобби N игроков
+##   --map=КЛЮЧ          …на этом уровне (по умолчанию полигон)
+##   --burst=T           хост на T-й секунде уровня прорывает две течи («Глубокая тарелка»)
+##   --lobby=T           хост на T-й секунде уровня возвращает бригаду в лобби
 ##   --walk=A-B          свой персонаж идёт вперёд с A по B секунду на уровне
 ##   --grab=A-B          свой персонаж в это время тянет обе руки вперёд-вниз
 ##   --ko=Имя@T          хост на T-й секунде уровня отправляет игрока в нокаут
@@ -19,6 +22,9 @@ var _use_done := false
 var _tape_done := false
 var _give_done := false
 var _give_t := 0.0
+var _burst_done := false
+var _lobby_done := false
+var _autostarted := false
 var _prev := {}      ## имя -> позиция на прошлом тике
 var _steps := {}     ## имя -> [тиков в движении, из них рывков] (плавность картинки)
 
@@ -30,9 +36,10 @@ func _ready() -> void:
 		get_tree().create_timer(float(args["probe-report"])).timeout.connect(_report)
 
 func _physics_process(dt: float) -> void:
-	if args.has("autostart") and Net.is_host() and Game.current_level == "" \
+	if args.has("autostart") and not _autostarted and Net.is_host() and Game.current_level == "" \
 			and Net.players.size() >= int(args["autostart"]):
-		Game.start_match()
+		_autostarted = true   # один раз: после возврата в лобби снова не начинаем
+		Game.start_match(str(args.get("map", "polygon")))
 	var scene := get_tree().current_scene
 	if scene == null or not ("world" in scene):
 		_level = null
@@ -57,6 +64,13 @@ func _physics_process(dt: float) -> void:
 			_me.use()
 	if Net.is_host():
 		_host_tape(dt)
+		if args.has("burst") and not _burst_done and _t >= float(args["burst"]) and "leaks" in _level:
+			_burst_done = true
+			_level.leaks[0].burst()
+			_level.leaks[5].burst()
+		if args.has("lobby") and not _lobby_done and _t >= float(args["lobby"]):
+			_lobby_done = true
+			Game.back_to_lobby()
 	for k in get_tree().get_nodes_in_group("kombez"):
 		if k.peer_id <= 0:
 			continue
@@ -103,7 +117,8 @@ static func _p(v: Vector3) -> Array:
 	return [snappedf(v.x, 0.01), snappedf(v.y, 0.01), snappedf(v.z, 0.01)]
 
 func _report() -> void:
-	var out := {"steps": _steps, "scene": "", "players": {}, "dummies": [], "helmets": [], "bodies": [], "tapes": [], "rolls": []}
+	var out := {"steps": _steps, "scene": "", "players": {}, "dummies": [], "helmets": [], "bodies": [], "tapes": [], "rolls": [],
+		"leaks": [], "flood": -1.0}
 	var scene := get_tree().current_scene
 	if scene != null:
 		out["scene"] = scene.scene_file_path
@@ -126,4 +141,8 @@ func _report() -> void:
 		for id in ids:
 			if id < 1000 and not (scene.world._nodes[id] is AnimatableBody3D):
 				out["bodies"].append(_p(scene.world._nodes[id].global_position))
+	for l in get_tree().get_nodes_in_group("leak"):
+		out["leaks"].append(l.state)
+	for f in get_tree().get_nodes_in_group("flood"):
+		out["flood"] = snappedf(f.level, 0.001)
 	print("PROBE ", JSON.stringify(out))

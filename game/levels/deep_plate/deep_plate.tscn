@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://levels/deep_plate/deep_plate.gd" id="1"]
+
+[node name="DeepPlate" type="Node3D"]
+script = ExtResource("1")

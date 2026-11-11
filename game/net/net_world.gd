@@ -21,6 +21,7 @@ const DELAY_MAX := 15.0        ## …и сам добавляет запас, е
 const REFRESH_TICKS := 120     ## спящий предмет всё равно обновляется раз в столько тиков
 const TELEPORT_DIST := 4.0     ## скачок дальше — это телепорт, а не движение
 const DYN_BASE := 1000
+const SNAP_BYTES := 1150       ## кусок снимка не больше этого (MTU ENet ~1390)
 const T_BODY := 0
 const T_KOMBEZ := 1
 
@@ -199,6 +200,8 @@ func _on_player_left(id: int) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _hello() -> void:
+	if not is_inside_tree():
+		return   # уровень уже выгружается (смена сцены)
 	var peer := multiplayer.get_remote_sender_id()
 	if not Net.is_host() or not Net.players.has(peer) or _ready_peers.has(peer):
 		return
@@ -243,6 +246,8 @@ func _send_action(action: StringName) -> void:
 
 @rpc("any_peer", "call_remote", "reliable")
 func _action(action: StringName) -> void:
+	if not is_inside_tree():
+		return   # уровень уже выгружается (смена сцены)
 	if not Net.is_host():
 		return
 	var peer := multiplayer.get_remote_sender_id()
@@ -258,6 +263,8 @@ func _action(action: StringName) -> void:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _player_input(move: Vector2, buttons: int, yaw: float, pitch: float) -> void:
+	if not is_inside_tree():
+		return   # уровень уже выгружается (смена сцены)
 	if not Net.is_host():
 		return
 	var k := kombez_of(multiplayer.get_remote_sender_id())
@@ -277,10 +284,10 @@ func _physics_process(_dt: float) -> void:
 	if Net.is_host():
 		_tick += 1
 		if not _ready_peers.is_empty() and _tick % SNAP_EVERY == 0:
-			var bytes := _write_snapshot(_full_next)
+			for bytes in _write_snapshot(_full_next):
+				for peer in _ready_peers:
+					_snapshot.rpc_id(peer, bytes)
 			_full_next = false
-			for peer in _ready_peers:
-				_snapshot.rpc_id(peer, bytes)
 	else:
 		_apply_snapshots()
 		var k := local_kombez
@@ -290,12 +297,17 @@ func _physics_process(_dt: float) -> void:
 
 # ---------- снимки: хост пишет ----------
 
-func _write_snapshot(full: bool) -> PackedByteArray:
-	var b := StreamPeerBuffer.new()
-	b.put_u32(_tick)
-	b.put_u16(0)
+## Снимок режется на куски не больше SNAP_BYTES (иначе пакет дробится и чаще теряется);
+## у всех кусков один тик.
+func _write_snapshot(full: bool) -> Array[PackedByteArray]:
+	var chunks: Array[PackedByteArray] = []
+	var b := _snap_header()
 	var count := 0
 	for id in _nodes:
+		if b.get_position() > SNAP_BYTES:
+			chunks.append(_snap_close(b, count))
+			b = _snap_header()
+			count = 0
 		var node: Node3D = _nodes[id]
 		if not node is PhysicsBody3D:
 			continue   # не тело (например, лента): его положение вычисляется, а не передаётся
@@ -320,6 +332,17 @@ func _write_snapshot(full: bool) -> PackedByteArray:
 			b.put_u8(k.net_flags())
 			b.put_u8(clampi(roundi(k.ground_dist * 100.0), 0, 255))
 		count += 1
+	if count > 0 or chunks.is_empty():
+		chunks.append(_snap_close(b, count))
+	return chunks
+
+func _snap_header() -> StreamPeerBuffer:
+	var b := StreamPeerBuffer.new()
+	b.put_u32(_tick)
+	b.put_u16(0)
+	return b
+
+static func _snap_close(b: StreamPeerBuffer, count: int) -> PackedByteArray:
 	b.seek(4)
 	b.put_u16(count)
 	return b.data_array
@@ -356,8 +379,11 @@ func _read_snapshot(bytes: PackedByteArray) -> void:
 	if bytes.size() < 6:
 		return
 	var tick := int(b.get_u32())
-	if tick <= _last_tick:
+	if tick < _last_tick:
 		return
+	var first_chunk := tick > _last_tick   # следующие куски того же снимка — тот же тик
+	if first_chunk:
+		_prev_tick = _last_tick
 	var count := b.get_u16()
 	for i in count:
 		if b.get_available_bytes() < 23:
@@ -391,7 +417,8 @@ func _read_snapshot(bytes: PackedByteArray) -> void:
 			tr = Track.new()
 			_tracks[id] = tr
 		tr.push(_prev_tick if _prev_tick >= 0 else tick, [tick, pos, q, extra])
-	_prev_tick = tick
+	if not first_chunk:
+		return
 	# Часы: считаем, насколько хост «впереди» нас, и как сильно снимки опаздывают.
 	var off := float(tick - _local_tick)
 	if _last_tick < 0 or absf(off - _offset) > 30.0:

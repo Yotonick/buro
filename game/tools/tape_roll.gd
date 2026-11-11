@@ -11,6 +11,7 @@ const MAX_SPAN := 6.0          ## дальше одним куском не тя
 const AIM_REACH := 3.0       ## с пояса лента достаёт на столько по взгляду игрока
 const REACH := 0.7             ## на таком расстоянии от рулона лента «достаёт» до поверхности
 const MIN_PIECE := 0.3         ## меньше на один кусок не тратится
+const MIN_PATCH := 0.15        ## заплатка по стене/стеклу (оба конца на неподвижном) — не короче
 const R_FULL := 0.115
 const R_CORE := 0.06
 
@@ -162,10 +163,10 @@ func use_tool(user: Kombez, hand: Node3D) -> void:
 		end_local = local
 		end_normal = local_n
 	else:
-		if id == end_id:
-			return   # оба конца на одном и том же — так ничего не скрепить
 		var from: Vector3 = Tape.anchor(_end_body(), end_local, end_normal, false)[0]
 		var span := from.distance_to(point)
+		if id == end_id and (id != 0 or span < MIN_PATCH):
+			return   # оба конца на одном предмете — так ничего не скрепить (по стене можно: это заплатка)
 		_world.spawn("tape", {"a": end_id, "la": end_local, "na": end_normal,
 			"b": id, "lb": local, "nb": local_n, "rest": maxf(span, 0.05)})
 		left = maxf(left - maxf(span, MIN_PIECE), 0.0)
@@ -263,11 +264,20 @@ func _update_mark() -> void:
 	if hit.is_empty():
 		return
 	# пока конец не прилеплен, пол и стены не подсвечиваем — иначе колечко маячит под ногами всё время
-	if not end_on and _world.id_of(hit["collider"]) == 0:
+	var hid: int = _world.id_of(hit["collider"])
+	var hp: Vector3 = hit["position"]
+	if not end_on and hid == 0 and not _hinted(hp):
 		return
-	if end_on and _world.id_of(hit["collider"]) == end_id:
+	if end_on and hid == end_id and hid != 0:
 		return   # на тот же предмет второй конец не клеится
 	var n: Vector3 = hit["normal"]
 	var up := Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT
 	_mark.global_transform = Transform3D(Basis.looking_at(n, up) * Basis(Vector3.RIGHT, -PI / 2), (hit["position"] as Vector3) + n * 0.015)
 	_mark.visible = true
+
+## Есть ли рядом что-то, что просит ленту (например, течь в стекле).
+func _hinted(p: Vector3) -> bool:
+	for n in get_tree().get_nodes_in_group("tape_hint"):
+		if n.wants_tape(p):
+			return true
+	return false
