@@ -5,7 +5,8 @@ extends "res://levels/level_base.gd"
 ## Дошла до столов — ресторан затопило. Продержались смену и всё заделано — справились.
 ## Насос у дальней стены откачивает воду — если собрать его разорванную трубу.
 ## Щиток у западной стены даёт свет: скачки выбивают пробки и рубильник, вода до розеток — короткое.
-## (Осьминог и приёмка метрдотелем — следующими шагами.)
+## Продержались смену и всё заделано — метрдотель обходит зал (plate_review.gd), итог — звёзды.
+## (Осьминог отложен владельцем.)
 
 const LeakScript := preload("res://levels/deep_plate/leak.gd")
 const FloodScript := preload("res://levels/deep_plate/flood.gd")
@@ -13,6 +14,8 @@ const ShiftScript := preload("res://levels/shift.gd")
 const PumpScript := preload("res://levels/deep_plate/pump.gd")
 const BoardScript := preload("res://levels/deep_plate/switchboard.gd")
 const SeaLife := preload("res://levels/deep_plate/sea_life.gd")
+const ClientNpc := preload("res://characters/client/client_npc.gd")
+const ReviewScript := preload("res://levels/deep_plate/plate_review.gd")
 const FLOOR_SHADER := preload("res://levels/deep_plate/floor.gdshader")
 
 const R := 10.0                ## радиус купола (внутренняя сторона стекла)
@@ -26,6 +29,7 @@ const SHIFT_LEN := 210.0       ## столько секунд прорывают
 const FIRST_LEAK := 12.0
 const GAP_START := 30.0        ## промежуток между прорывами в начале смены…
 const GAP_END := 11.0          ## …и в конце
+const REVIEW_START := Vector3(0, 0, R + 4.2)   ## метрдотель выходит из глубины шлюза
 ## Стёкла, где может прорваться: номер стекла и высота дыры над полом.
 const LEAK_SPOTS := [[0, 0.7], [3, 1.5], [6, 1.0], [12, 1.8], [15, 0.6], [18, 1.3],
 	[21, 0.9], [24, 1.7], [27, 0.6], [30, 1.2], [33, 2.0], [36, 0.8], [38, 1.5], [14, 1.1]]
@@ -50,6 +54,9 @@ var env: Environment
 var table_lamps: Array = []
 var center_light: OmniLight3D
 var sun: DirectionalLight3D
+var tables: Array = []         ## {body, center, top, food, dish, sector} — для приёмки
+var maitre: AnimatableBody3D   ## метрдотель (client_npc.gd)
+var review: Node               ## plate_review.gd (работает только у хоста)
 
 var _next_leak := FIRST_LEAK
 var _rng := RandomNumberGenerator.new()
@@ -65,8 +72,9 @@ func _build() -> void:
 	_build_hall()
 	_build_pump()
 	_build_board()
+	_build_maitre()
 	world.spawned.connect(_on_kombez_spawned)
-	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nЩиток: пробки — обратно в гнёзда, рубильник — вверх (падает — держи или примотай), вода у розеток — повесь щиток на крюк\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
+	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nЩиток: пробки — обратно в гнёзда, рубильник — вверх (падает — держи или примотай), вода у розеток — повесь щиток на крюк\nПосле смены — приёмка: метрдотель обходит зал (еда, посуда, свет, заплатки) и ставит звёзды\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
 
 func _on_kombez_spawned(node: Node, kind: String, _params: Dictionary) -> void:
 	if kind == "kombez":
@@ -97,10 +105,9 @@ func _tick(dt: float) -> void:
 		if _next_leak <= 0.0:
 			_burst_one()
 			_next_leak = lerpf(GAP_START, GAP_END, shift.time / SHIFT_LEN) * k
-	elif open == 0:
-		var lit: int = board.lit_sectors()
-		var light := "Свет горит." if lit == 3 else ("Правда, банкет доедали в темноте." if lit == 0 else "Правда, в углу темновато.")
-		shift.finish(true, "КУПОЛ ДЕРЖИТСЯ", "Смена окончена. Гости даже не заметили (почти). " + light)
+	elif open == 0 and not shift.reviewing():
+		shift.start_review("ПРИЁМКА", "Метрдотель обходит зал. Приберись там, куда он ещё не дошёл!")
+		review.start()
 
 func _burst_one() -> void:
 	var whole := leaks.filter(func(l): return not l.is_burst())
@@ -340,6 +347,13 @@ func _build_board() -> void:
 		sectors.append([table_lamps[i * 2], table_lamps[i * 2 + 1]])
 	board.set_lights(sectors, [center_light], env, sun)
 
+func _build_maitre() -> void:
+	maitre = ClientNpc.create(self, REVIEW_START, 0.0)
+	review = ReviewScript.new()
+	review.name = "Review"
+	add_child(review)
+	review.setup(self, maitre)
+
 func _build_hall() -> void:
 	# центральная колонна с отметкой «вода до столов»
 	var col := Kit.block(self, Vector3(0, 4.0, 0), Vector3(0.9, 8.0, 0.9), Kit.mat(Color("d9d2bf"), 0.4))
@@ -370,20 +384,28 @@ func _build_hall() -> void:
 		table.set_meta("float", 0.3)
 		Kit.model(self, "res://assets/furniture/rugRound.glb", c + Vector3(0, 0.005, 0), 2.2, a)
 		var top := Kit.model_aabb(table.get_child(0)).size.y
+		var rec := {"body": table, "center": c, "top": top, "food": 0, "dish": 1, "sector": t / 2}
+		tables.append(rec)
 		for s in 3:
 			var ca := a + s * TAU / 3.0 + 0.5
 			var cp := c + Vector3(cos(ca), 0, sin(ca)) * 1.15
 			var chair := Kit.model_prop(self, "res://assets/furniture/chairCushion.glb", cp, 2.0, 6.0, -ca - PI / 2)
 			chair.set_meta("float", 2.5)
+			chair.add_to_group("chair")
 			var pp := c + Vector3(cos(ca), 0, sin(ca)) * 0.42 + Vector3.UP * top
 			var plate := Kit.model_prop(self, "res://assets/food/plate.glb", pp, 0.3, 0.5)
 			plate.set_meta("float", 2.2)
+			plate.add_to_group("dish")
+			rec["dish"] += 1
 			if (t + s) % 2 == 0:
 				var f: Array = FOOD[(t * 3 + s) % FOOD.size()]
 				var food := Kit.model_prop(self, f[0], pp + Vector3.UP * 0.03, f[1], f[2], ca)
 				food.set_meta("float", 1.5)
+				food.add_to_group("food")
+				rec["food"] += 1
 		var bottle := Kit.model_prop(self, "res://assets/food/wine-red.glb", c + Vector3.UP * top, 0.35, 0.8)
 		bottle.set_meta("float", 1.2)
+		bottle.add_to_group("dish")
 		var lamp := OmniLight3D.new()
 		lamp.position = c + Vector3(0, 2.2, 0)
 		lamp.light_color = Color("ffcf8a")

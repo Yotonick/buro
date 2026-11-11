@@ -143,7 +143,15 @@ func _part_a() -> void:
 				_patch(l, _spot(l, -0.3, 0.1 * (i - 1)), _spot(l, 0.3, -0.1 * (i - 1)))
 	lvl.shift.time = lvl.SHIFT_LEN + 1.0
 	await _wait(0.5)
-	_check("смена окончена, всё заделано — успех", lvl.shift.phase == 1 and lvl.hud.banner_text() != "", lvl.hud.banner_text())
+	_check("смена окончена, всё заделано — началась приёмка", lvl.shift.reviewing() and lvl.maitre.active, lvl.hud.banner_text())
+	lvl.maitre.speed = 12.0   # обход целиком проверяет review_test; здесь — только что смена закончится
+	lvl.review.pace = 0.05
+	for i in 60:
+		if lvl.shift.phase != 3:
+			break
+		await _wait(0.5)
+	_check("приёмка закончилась — успех со звёздами", lvl.shift.phase == 1 and lvl.hud.banner_stars() >= 0,
+		"%s, звёзд %d" % [lvl.hud.banner_text(), lvl.hud.banner_stars()])
 
 func _part_b() -> void:
 	await _load()

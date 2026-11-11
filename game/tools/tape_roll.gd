@@ -185,13 +185,13 @@ func _find_surface(user: Kombez, hand: Node3D) -> Dictionary:
 	var space := get_world_3d().direct_space_state
 	var exclude: Array[RID] = [get_rid(), user.get_rid(), user.hand_l.get_rid(), user.hand_r.get_rid()]
 	if hand == null:   # рулон на поясе: клеим туда, куда смотрит игрок
-		var aq := PhysicsRayQueryParameters3D.create(user.aim_origin(), user.aim_origin() + user.aim_dir() * AIM_REACH, 1 | 2 | 4)
+		var aq := PhysicsRayQueryParameters3D.create(user.aim_origin(), user.aim_origin() + user.aim_dir() * AIM_REACH, 1 | 2 | 4 | 16)
 		aq.exclude = exclude
 		return space.intersect_ray(aq)
 	var from: Vector3 = user.shoulder_global(hand.side)
 	var dir := global_position - from
 	dir = dir.normalized() if dir.length() > 0.05 else -user.global_basis.z
-	var q := PhysicsRayQueryParameters3D.create(global_position - dir * 0.2, global_position + dir * REACH, 1 | 2 | 4)
+	var q := PhysicsRayQueryParameters3D.create(global_position - dir * 0.2, global_position + dir * REACH, 1 | 2 | 4 | 16)
 	q.exclude = exclude
 	var hit := space.intersect_ray(q)
 	if not hit.is_empty():
@@ -201,7 +201,7 @@ func _find_surface(user: Kombez, hand: Node3D) -> Dictionary:
 	sph.radius = 0.45
 	sq.shape = sph
 	sq.transform = Transform3D(Basis.IDENTITY, global_position)
-	sq.collision_mask = 1 | 2 | 4
+	sq.collision_mask = 1 | 2 | 4 | 16
 	sq.exclude = exclude
 	var rest := space.get_rest_info(sq)
 	if rest.is_empty():

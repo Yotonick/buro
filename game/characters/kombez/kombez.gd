@@ -23,6 +23,7 @@ const L_WORLD := 1
 const L_PROP := 2
 const L_BODY := 4
 const L_HAND := 8
+const L_NPC := 16              ## клиенты на вызове (метрдотель): толкают Комбеза, но не предметы
 
 # --- настройка ощущений (крутим по отзывам) ---
 const BODY_MASS := 40.0
@@ -99,7 +100,7 @@ func _ready() -> void:
 	contact_monitor = true
 	max_contacts_reported = 6
 	collision_layer = L_BODY
-	collision_mask = L_WORLD | L_PROP | L_BODY
+	collision_mask = L_WORLD | L_PROP | L_BODY | L_NPC
 	linear_damp = 0.05
 	angular_damp = 0.3
 	var mat := PhysicsMaterial.new()

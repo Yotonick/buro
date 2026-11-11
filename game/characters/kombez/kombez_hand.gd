@@ -113,7 +113,7 @@ func _physics_process(_dt: float) -> void:
 
 	if active != _was_active:
 		_was_active = active
-		collision_mask = (1 | 2 | 4) if active else 0
+		collision_mask = (1 | 2 | 4 | 16) if active else 0
 		if not active:
 			release()
 

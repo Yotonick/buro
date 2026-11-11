@@ -171,8 +171,12 @@ func _find_cover() -> Node3D:
 
 ## Сколько полосок ленты проходит через дыру.
 func _strips() -> int:
+	return crossing_tapes().size()
+
+## Полоски ленты, которые проходят через дыру (для приёмки: их можно отодрать).
+func crossing_tapes() -> Array:
 	var p := global_position
-	var count := 0
+	var out: Array = []
 	for t in get_tree().get_nodes_in_group("tape"):
 		if t.is_queued_for_deletion():
 			continue
@@ -180,8 +184,8 @@ func _strips() -> int:
 		var b: Vector3 = t.end_point(false)
 		var c := Geometry3D.get_closest_point_to_segment(p, a, b)
 		if c.distance_to(p) < CROSS_R:
-			count += 1
-	return count
+			out.append(t)
+	return out
 
 ## Струя бьёт в первое тело на пути.
 func _blast(n: Vector3) -> void:

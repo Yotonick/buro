@@ -311,6 +311,10 @@ func lit_sectors() -> int:
 		return 0
 	return fuse_in.count(true)
 
+## Горит ли сектор i (пробка i — столы 2i и 2i+1).
+func sector_lit(i: int) -> bool:
+	return powered() and bool(fuse_in[i])
+
 ## Где сейчас розетки щитка (по ним меряем воду).
 func contacts_y() -> float:
 	return (panel.global_transform * CONTACTS).y

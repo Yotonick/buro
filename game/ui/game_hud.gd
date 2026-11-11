@@ -8,6 +8,9 @@ var _hint: Label
 var _pause: Control
 var _root: Control
 var _banner: VBoxContainer
+var _line: Label
+var _line_left := 0.0
+var _banner_left := 0.0
 
 func _ready() -> void:
 	_root = Control.new()
@@ -71,11 +74,50 @@ func _ready() -> void:
 	_banner.visible = false
 	_root.add_child(_banner)
 
+	_line = Style.label("", 22, Style.TEXT)   # реплика клиента — чтобы было слышно и издалека
+	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_line.add_theme_color_override("font_outline_color", Style.BG)
+	_line.add_theme_constant_override("outline_size", 8)
+	_line.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_line.offset_left = -420
+	_line.offset_right = 420
+	_line.offset_top = -170
+	_line.offset_bottom = -110
+	_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_line.visible = false
+	_root.add_child(_line)
+
+func _process(dt: float) -> void:
+	if _line_left > 0.0:
+		_line_left -= dt
+		_line.modulate.a = clampf(_line_left / 0.5, 0.0, 1.0)
+		_line.visible = _line_left > 0.0
+	if _banner_left > 0.0:
+		_banner_left -= dt
+		if _banner_left <= 0.0:
+			_banner.visible = false
+
+## Строка внизу по центру на sec секунд (реплики клиента).
+func show_line(text: String, sec := 4.0) -> void:
+	_line.text = text
+	_line_left = sec
+	_line.modulate.a = 1.0
+	_line.visible = true
+
+func line_text() -> String:
+	return _line.text if _line.visible else ""
+
 ## Большая табличка по центру сверху: итог смены и т.п.
-func show_banner(title: String, sub := "", good := true) -> void:
+## stars ≥ 0 — ряд из пяти звёзд под заголовком; hide_after > 0 — спрятать через столько секунд.
+func show_banner(title: String, sub := "", good := true, stars := -1, hide_after := 0.0) -> void:
 	for c in _banner.get_children():
 		c.queue_free()
-	for line in [[title, 54, Style.ACCENT if good else Style.DANGER], [sub, 24, Style.TEXT]]:
+	for line in [[title, 54, Style.ACCENT if good else Style.DANGER], ["*", 0, null], [sub, 24, Style.TEXT]]:
+		if line[0] == "*":
+			if stars >= 0:
+				_banner.add_child(_stars_row(stars))
+			continue
 		if line[0] == "":
 			continue
 		var l := Style.label(line[0], line[1], line[2])
@@ -84,6 +126,35 @@ func show_banner(title: String, sub := "", good := true) -> void:
 		l.add_theme_constant_override("outline_size", 10)
 		_banner.add_child(l)
 	_banner.visible = true
+	_banner_left = hide_after
+	_banner_stars = stars
+
+var _banner_stars := -1
+
+func banner_stars() -> int:
+	return _banner_stars if _banner.visible else -1
+
+func _stars_row(n: int) -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in 5:
+		var st := Control.new()
+		st.custom_minimum_size = Vector2(54, 54)
+		st.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var on := i < n
+		st.draw.connect(func():
+			var pts := PackedVector2Array()
+			for k in 10:
+				var a := -PI / 2 + k * PI / 5
+				var r := 25.0 if k % 2 == 0 else 10.5
+				pts.append(Vector2(27, 29) + Vector2(cos(a), sin(a)) * r)
+			st.draw_colored_polygon(pts, Style.ACCENT if on else Style.PANEL.lightened(0.15))
+			pts.append(pts[0])
+			st.draw_polyline(pts, Style.BG, 3.0, true))
+		row.add_child(st)
+	return row
 
 func banner_text() -> String:
 	var parts: Array[String] = []

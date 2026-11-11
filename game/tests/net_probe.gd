@@ -14,6 +14,8 @@ extends Node
 ##   --give=Имя          хост кладёт рулон изоленты в левую руку игрока, как только тот её поднимет
 ##   --bad-link=З,Р,П    плохая связь: задержка З с, разброс Р с, потери П (0..1) для входящих снимков
 ##   --probe-report=T    на T-й секунде от запуска печатает состояние мира (строка PROBE)
+##   --review=T          хост на T-й секунде уровня заканчивает смену — начинается приёмка (метрдотель ускорен)
+##   --review-report     печатает PROBE через 1 с после того, как приёмка закончилась
 
 var args := {}
 var _level: Node
@@ -28,6 +30,8 @@ var _burst_done := false
 var _pump_done := false
 var _surge_done := false
 var _lobby_done := false
+var _review_done := false
+var _review_rep := -1.0
 var _autostarted := false
 var _prev := {}      ## имя -> позиция на прошлом тике
 var _steps := {}     ## имя -> [тиков в движении, из них рывков] (плавность картинки)
@@ -78,9 +82,20 @@ func _physics_process(dt: float) -> void:
 		if args.has("pump") and not _pump_done and _t >= float(args["pump"]) and "pump" in _level:
 			_pump_done = true
 			_fix_pump(_level.pump)
+		if args.has("review") and not _review_done and _t >= float(args["review"]) and "review" in _level:
+			_review_done = true
+			_level.maitre.speed = 7.0
+			_level.review.pace = 0.25
+			_level.shift.time = _level.SHIFT_LEN + 1.0
 		if args.has("lobby") and not _lobby_done and _t >= float(args["lobby"]):
 			_lobby_done = true
 			Game.back_to_lobby()
+	if args.has("review-report") and "shift" in _level and _level.shift != null and _level.shift.phase == 1:
+		if _review_rep < 0.0:
+			_review_rep = _t
+		elif _t - _review_rep >= 1.0 and _review_rep < 1e8:
+			_review_rep = 1e9
+			_report()
 	for k in get_tree().get_nodes_in_group("kombez"):
 		if k.peer_id <= 0:
 			continue
@@ -186,6 +201,10 @@ func _report() -> void:
 	if _level != null and "board" in _level and _level.board != null:
 		var bd: Node3D = _level.board
 		out["board"] = [bd.fuse_in, bd.lever_on, bd.short, bd.lit_sectors()]
+	if _level != null and "maitre" in _level and _level.maitre != null:
+		var m: Node3D = _level.maitre
+		out["maitre"] = [m.active, _p(m.global_position), m.mood, m.last_line()]
+		out["shift"] = [_level.shift.phase, _level.shift.stars, _level.hud.banner_stars(), _level.hud.banner_text()]
 	for pm in get_tree().get_nodes_in_group("pump"):
 		out["pump"] = [pm.state, snappedf(pm.valve, 0.05), pm.loose_joints.size()]
 	print("PROBE ", JSON.stringify(out))
