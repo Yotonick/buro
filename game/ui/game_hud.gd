@@ -19,9 +19,7 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
 
-	_hint = Style.label("", 16, Style.TEXT)
-	_hint.add_theme_color_override("font_outline_color", Style.BG)
-	_hint.add_theme_constant_override("outline_size", 6)
+	_hint = Style.outlined(Style.label("", 16, Style.TEXT), 6)
 	_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
 	_hint.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_root.add_child(_hint)
@@ -44,26 +42,30 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_pause.add_child(center)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 24)
+	center.add_child(row)
+	var panel := Style.plate(true)
+	panel.custom_minimum_size = Vector2(380, 0)
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(panel)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(360, 0)
-	box.add_theme_constant_override("separation", 14)
-	center.add_child(box)
-	var title := Style.label("Перекур", 36, Style.ACCENT)
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var title := Style.title("ПЕРЕКУР", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
-	var cont := Button.new()
-	cont.text = "Продолжить"
-	cont.pressed.connect(set_paused.bind(false))
-	box.add_child(cont)
+	var sub := Style.label("Мир не стоит — бригада работает без тебя", 17, Style.MUTED)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(sub)
+	box.add_child(Style.spacer(4))
+	box.add_child(Style.button("Продолжить", set_paused.bind(false), "primary"))
 	if Net.in_session() and Net.is_host():
-		var lobby := Button.new()
-		lobby.text = "Вернуть бригаду в лобби"
-		lobby.pressed.connect(func(): Game.back_to_lobby())
-		box.add_child(lobby)
-	var quit := Button.new()
-	quit.text = "В меню"
-	quit.pressed.connect(_to_menu)
+		box.add_child(Style.button("Вернуть бригаду в лобби", func(): Game.back_to_lobby()))
+	var quit := Style.button("В меню", _to_menu, "danger")
+	quit.set_meta("back", true)
 	box.add_child(quit)
+	row.add_child(_controls_card())
 	set_paused(false)
 
 	_banner = VBoxContainer.new()
@@ -74,11 +76,9 @@ func _ready() -> void:
 	_banner.visible = false
 	_root.add_child(_banner)
 
-	_line = Style.label("", 22, Style.TEXT)   # реплика клиента — чтобы было слышно и издалека
+	_line = Style.outlined(Style.label("", 22, Style.TEXT), 8)   # реплика клиента — чтобы было слышно и издалека
 	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_line.add_theme_color_override("font_outline_color", Style.BG)
-	_line.add_theme_constant_override("outline_size", 8)
 	_line.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_line.offset_left = -420
 	_line.offset_right = 420
@@ -87,6 +87,28 @@ func _ready() -> void:
 	_line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_line.visible = false
 	_root.add_child(_line)
+
+## Карточка управления в паузе — клавиши из текущей раскладки.
+func _controls_card() -> Control:
+	var card := Style.plate()
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	card.add_child(box)
+	box.add_child(Style.title("УПРАВЛЕНИЕ", 22, Style.TEXT))
+	var moves := HBoxContainer.new()
+	moves.add_theme_constant_override("separation", 4)
+	for a in ["move_forward", "move_left", "move_back", "move_right"]:
+		moves.add_child(Style.key(a, 30))
+	var ml := Style.label("ходить", 18)
+	ml.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	moves.add_child(Style.spacer(0))
+	moves.add_child(ml)
+	box.add_child(moves)
+	for pair in [["grab_left", "левая рука"], ["grab_right", "правая рука"], ["jump", "прыжок"],
+			["use", "использовать / на пояс"], ["drop_tool", "бросить инструмент"], ["crouch", "присесть"],
+			["flop", "упасть"], ["laugh", "ржать"], ["respawn", "встать на место"]]:
+		box.add_child(Style.key_hint(pair[0], pair[1], 18))
+	return card
 
 func _process(dt: float) -> void:
 	if _line_left > 0.0:
@@ -120,10 +142,9 @@ func show_banner(title: String, sub := "", good := true, stars := -1, hide_after
 			continue
 		if line[0] == "":
 			continue
-		var l := Style.label(line[0], line[1], line[2])
+		var l: Label = Style.title(line[0], line[1], line[2]) if line[1] > 30 else Style.label(line[0], line[1], line[2])
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.add_theme_color_override("font_outline_color", Style.BG)
-		l.add_theme_constant_override("outline_size", 10)
+		Style.outlined(l, 12 if line[1] > 30 else 8)
 		_banner.add_child(l)
 	_banner.visible = true
 	_banner_left = hide_after

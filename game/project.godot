@@ -4,7 +4,7 @@ config_version=5
 [application]
 
 config/name="Бюро Невозможного Ремонта"
-config/version="0.8.0"
+config/version="0.8.1"
 run/main_scene="res://ui/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
@@ -14,6 +14,7 @@ Settings="*res://core/settings.gd"
 Controls="*res://core/controls.gd"
 Net="*res://net/net.gd"
 Game="*res://core/game.gd"
+UiSound="*res://ui/ui_sound.gd"
 
 [display]
 

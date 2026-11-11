@@ -33,3 +33,8 @@
 | Food Kit: plate, turkey, cake-birthday, fish, wine-red и др. + `Textures/colormap.png` | Kenney | CC0 | `game/assets/food/` |
 | Fish1–3, Manta (из «Manta ray»), Shark (FBX, анимация Swim) | Quaternius | CC0 | `game/assets/fish/` |
 | Factory Kit: machine (корпус насоса) + `Textures/colormap.png` | Kenney | CC0 | `game/assets/factory/` |
+
+## Шрифты и звуки интерфейса (2026-11-11)
+- `game/ui/theme/fonts/`: Russo One, Rubik (вырезаны начертания 400 и 600 из вариативного), Caveat (600), PT Mono — все SIL OFL 1.1, взяты из публичного репозитория `google/fonts`; файлы лицензий лежат рядом (`OFL_*.txt`).
+- `game/ui/theme/sounds/`: 12 звуков из Kenney Interface Sounds (CC0), переименованы по назначению (hover, click, back, open, close, confirm, error, toggle, tab, pop, stamp, paper); лицензия — `License_Kenney.txt`.
+- `game/ui/theme/icons/`: эмблема бюро и значки мыши — нарисованы студией (SVG).

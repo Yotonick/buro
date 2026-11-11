@@ -13,40 +13,45 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	var panel := Style.plate(true)
+	panel.custom_minimum_size = Vector2(600, 0)
+	center.add_child(panel)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(520, 0)
 	box.add_theme_constant_override("separation", 12)
-	center.add_child(box)
+	panel.add_child(box)
 
-	box.add_child(Style.label("Бригада", 36, Style.ACCENT))
-	_count = Style.label("", 18, Style.MUTED)
-	box.add_child(_count)
+	var head := HBoxContainer.new()
+	box.add_child(head)
+	head.add_child(Style.logo(56))
+	head.add_child(Style.title("БРИГАДА", 40))
+	var pad := Control.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(pad)
+	_count = Style.title("", 28, Style.MUTED)
+	_count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(_count)
+
 	_list = VBoxContainer.new()
-	_list.add_theme_constant_override("separation", 8)
-	_list.custom_minimum_size = Vector2(0, 220)
+	_list.add_theme_constant_override("separation", 4)
+	_list.custom_minimum_size = Vector2(0, 0)
 	box.add_child(_list)
 
 	if Net.is_host():
-		var hint := Style.label(_host_hint(), 18, Style.MUTED)
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		box.add_child(hint)
-
-	if Net.is_host():
-		var start := Button.new()
-		start.text = "Вызов: подводный ресторан «Глубокая тарелка»"
-		start.pressed.connect(func(): Game.start_match("deep_plate"))
+		var note := Style.sticker(_host_hint(), 1.5, 340.0, 24)
+		note.size_flags_horizontal = Control.SIZE_SHRINK_END
+		box.add_child(note)
+		box.add_child(Style.spacer(6))
+		var start := Style.button("Вызов: подводный ресторан «Глубокая тарелка»", func(): Game.start_match("deep_plate"), "primary")
 		box.add_child(start)
 		start.grab_focus()
-		var poly := Button.new()
-		poly.text = "Полигон (потренироваться)"
-		poly.pressed.connect(func(): Game.start_match("polygon"))
-		box.add_child(poly)
+		box.add_child(Style.button("Полигон (потренироваться)", func(): Game.start_match("polygon")))
 	else:
-		box.add_child(Style.label("Ждём, когда хост начнёт смену…", 18, Style.MUTED))
+		var wait := Style.label("Ждём, когда хост выберет вызов…", 20, Style.MUTED)
+		wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(wait)
 
-	var leave := Button.new()
-	leave.text = "Закрыть игру" if Net.is_host() else "Выйти из бригады"
-	leave.pressed.connect(_on_leave)
+	var leave := Style.button("Закрыть игру" if Net.is_host() else "Выйти из бригады", _on_leave, "danger")
+	leave.set_meta("back", true)
 	box.add_child(leave)
 
 	Net.players_changed.connect(_refresh)
@@ -58,8 +63,8 @@ func _host_hint() -> String:
 		if a.begins_with("26."):
 			radmin.append(a)
 	if radmin.is_empty():
-		return "Radmin VPN не найден. Запустите его — друзья подключаются по вашему Radmin-IP (вида 26.x.x.x)."
-	return "Ваш Radmin-IP для друзей: %s" % ", ".join(radmin)
+		return "Radmin VPN не найден! Запусти его — друзья подключаются по твоему Radmin-IP (26.x.x.x)."
+	return "IP для друзей: %s" % ", ".join(radmin)
 
 func _refresh() -> void:
 	for c in _list.get_children():
@@ -68,19 +73,40 @@ func _refresh() -> void:
 	ids.sort()
 	_count.text = "%d из %d" % [ids.size(), Net.MAX_PLAYERS]
 	for id in ids:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 12)
-		var chip := ColorRect.new()
-		chip.color = Net.color_of(id)
-		chip.custom_minimum_size = Vector2(28, 28)
-		row.add_child(chip)
-		var text: String = Net.players[id]["name"]
-		if id == 1:
-			text += "  (хост)"
-		if id == Net.local_id():
-			text += "  — это вы"
-		row.add_child(Style.label(text))
-		_list.add_child(row)
+		_list.add_child(_player_row(id))
+	for i in range(ids.size(), Net.MAX_PLAYERS):
+		var empty := Style.label("— свободное место —", 18, Style.MUTED.darkened(0.3))
+		empty.custom_minimum_size = Vector2(0, 42)
+		empty.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_list.add_child(empty)
+
+## Строка бригады: каска цвета игрока, имя, пометки.
+func _player_row(id: int) -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(0, 42)
+	row.add_theme_constant_override("separation", 14)
+	var col := Net.color_of(id)
+	var helmet := Control.new()
+	helmet.custom_minimum_size = Vector2(44, 44)
+	helmet.draw.connect(func():
+		helmet.draw_circle(Vector2(22, 26), 18, Style.NAVY_DEEP)
+		helmet.draw_arc(Vector2(22, 26), 16, PI, TAU, 24, col, 16.0, true)
+		helmet.draw_rect(Rect2(2, 26, 40, 6), col.darkened(0.2))
+		helmet.draw_rect(Rect2(20, 9, 4, 10), col.lightened(0.25)))
+	row.add_child(helmet)
+	var name_l := Style.title(str(Net.players[id]["name"]), 24, Style.TEXT)
+	name_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(name_l)
+	var tags: Array[String] = []
+	if id == 1:
+		tags.append("бригадир")
+	if id == Net.local_id():
+		tags.append("это ты")
+	if not tags.is_empty():
+		var t := Style.label("· " + " · ".join(tags), 18, Style.MUTED)
+		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(t)
+	return row
 
 func _on_leave() -> void:
 	Net.leave()

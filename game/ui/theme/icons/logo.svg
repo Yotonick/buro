@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- эмблема бюро: гайка-шестигранник, внутри рулон изоленты, поверх — гаечный ключ -->
+<defs>
+<mask id="jaw">
+<rect x="0" y="0" width="256" height="256" fill="white"/>
+<rect x="117" y="26" width="22" height="34" rx="3" fill="black"/>
+</mask>
+</defs>
+<polygon points="128,12 228,70 228,186 128,244 28,186 28,70" fill="#F2A81D" stroke="#14233A" stroke-width="10" stroke-linejoin="round"/>
+<path d="M176 156 L214 176 L206 194 L166 172 Z" fill="#3B5F8A" stroke="#14233A" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="128" cy="128" r="70" fill="#14233A"/>
+<circle cx="128" cy="128" r="58" fill="#3B5F8A"/>
+<circle cx="128" cy="128" r="46" fill="none" stroke="#2B4A70" stroke-width="4"/>
+<circle cx="128" cy="128" r="27" fill="#F2A81D" stroke="#14233A" stroke-width="8"/>
+<g transform="rotate(-45 128 128)" stroke="#14233A" stroke-width="7" stroke-linejoin="round">
+<g mask="url(#jaw)">
+<circle cx="128" cy="62" r="26" fill="#D9DEE6"/>
+</g>
+<rect x="117" y="78" width="22" height="118" rx="10" fill="#D9DEE6"/>
+<rect x="118.5" y="74" width="19" height="14" fill="#D9DEE6" stroke="none"/>
+<circle cx="128" cy="180" r="5" fill="#14233A" stroke="none"/>
+</g>
+</svg>
