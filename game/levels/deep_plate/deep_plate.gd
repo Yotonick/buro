@@ -3,11 +3,13 @@ extends "res://levels/level_base.gd"
 ## Стеклянный купол на дне моря, идёт банкет, купол течёт. Бригада входит через
 ## служебный шлюз. Течи прорываются всё чаще; вода поднимается от каждой открытой.
 ## Дошла до столов — ресторан затопило. Продержались смену и всё заделано — справились.
-## (Насос, щиток, осьминог и приёмка метрдотелем — следующими шагами.)
+## Насос у дальней стены откачивает воду — если собрать его разорванную трубу.
+## (Щиток, осьминог и приёмка метрдотелем — следующими шагами.)
 
 const LeakScript := preload("res://levels/deep_plate/leak.gd")
 const FloodScript := preload("res://levels/deep_plate/flood.gd")
 const ShiftScript := preload("res://levels/shift.gd")
+const PumpScript := preload("res://levels/deep_plate/pump.gd")
 const SeaLife := preload("res://levels/deep_plate/sea_life.gd")
 const FLOOR_SHADER := preload("res://levels/deep_plate/floor.gdshader")
 
@@ -15,6 +17,7 @@ const R := 10.0                ## радиус купола (внутрення�
 const WALL_H := 3.2            ## высота стеклянной стены, выше — свод
 const SEGMENTS := 40           ## стена собрана из плоских стёкол
 const DOOR_ANGLE := PI / 2     ## шлюз — со стороны +Z
+const PUMP_AT := Vector3(0, 0, -8.6)   ## насосная — у стекла напротив шлюза
 const TABLE_H := 0.72          ## вода выше этого — затопило
 const SHIFT_LEN := 210.0       ## столько секунд прорываются новые течи
 const FIRST_LEAK := 12.0
@@ -38,6 +41,7 @@ const FOOD := [
 var leaks: Array = []
 var flood: Node3D
 var shift: Node3D
+var pump: Node3D
 
 var _next_leak := FIRST_LEAK
 var _rng := RandomNumberGenerator.new()
@@ -51,8 +55,9 @@ func _build() -> void:
 	_build_dome()
 	_build_airlock()
 	_build_hall()
+	_build_pump()
 	world.spawned.connect(_on_kombez_spawned)
-	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nДошла вода до столов — ресторан затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
+	hint = "Купол течёт! Прижми к дыре что угодно (заглушку, тарелку, ладонь) и примотай лентой — или заклей дыру лентой крест-накрест (3 полоски)\nНасос у дальней стены: 3 куска трубы от приямка до насоса, стыки — лентой, вентиль — против часовой\nВода до столов — затопило   ·   E — рулон на пояс / клеить   ·   Q — бросить   ·   ЛКМ/ПКМ — руки   ·   Ctrl — присесть   ·   R — в шлюз   ·   Esc — пауза"
 
 func _on_kombez_spawned(node: Node, kind: String, _params: Dictionary) -> void:
 	if kind == "kombez":
@@ -63,7 +68,7 @@ func _on_kombez_spawned(node: Node, kind: String, _params: Dictionary) -> void:
 
 func _tick(dt: float) -> void:
 	if not shift.working():
-		flood.set_flow(0.0)
+		flood.set_flow(0.0, 0.0)
 		return
 	var total := 0.0
 	var open := 0
@@ -71,7 +76,7 @@ func _tick(dt: float) -> void:
 		total += l.flow()
 		if l.flow() > 0.0:
 			open += 1
-	flood.set_flow(total)
+	flood.set_flow(total, pump.drain())
 	if flood.level >= TABLE_H:
 		shift.finish(false, "ЗАТОПИЛО", "Банкет поплыл. Метрдотель вызывает другую бригаду.")
 		return
@@ -301,6 +306,15 @@ func _build_airlock() -> void:
 		plug.set_meta("float", 1.6)
 	Kit.sign(self, Vector3(1.2, 1.35, z1 - 0.6), "ЗАГЛУШКИ", PI, 36)
 
+func _build_pump() -> void:
+	# куски трубы: два валяются у насосной, третий унесло в зал
+	var lying := func(at: Vector3, yaw: float) -> Transform3D:
+		return Transform3D(Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, PI / 2), at + Vector3.UP * PumpScript.FLANGE_R)
+	pump = PumpScript.new()
+	pump.build(self, Transform3D(Basis.IDENTITY, PUMP_AT),
+		[lying.call(Vector3(-1.0, 0, -7.4), 0.4), lying.call(Vector3(1.3, 0, -7.2), -0.6), lying.call(Vector3(2.2, 0, 1.8), 1.1)])
+	world.track(pump)
+
 func _build_hall() -> void:
 	# центральная колонна с отметкой «вода до столов»
 	var col := Kit.block(self, Vector3(0, 4.0, 0), Vector3(0.9, 8.0, 0.9), Kit.mat(Color("d9d2bf"), 0.4))
@@ -354,7 +368,7 @@ func _build_hall() -> void:
 	# растения в кадках у стекла
 	for i in 8:
 		var a := i * TAU / 8.0 + 0.4
-		if absf(angle_difference(a, DOOR_ANGLE)) < 0.5:
-			continue
+		if absf(angle_difference(a, DOOR_ANGLE)) < 0.5 or absf(angle_difference(a, -PI / 2 - 0.4)) < 0.3:
+			continue   # проём шлюза и насосная
 		var p := Kit.model_prop(self, "res://assets/furniture/pottedPlant.glb", Vector3(cos(a), 0, sin(a)) * (R - 0.8), 2.0, 12.0)
 		p.set_meta("float", 0.4)

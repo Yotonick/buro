@@ -32,3 +32,4 @@
 | Furniture Kit: tableRound, chairCushion, rugRound, pottedPlant и др. | Kenney | CC0 | `game/assets/furniture/` |
 | Food Kit: plate, turkey, cake-birthday, fish, wine-red и др. + `Textures/colormap.png` | Kenney | CC0 | `game/assets/food/` |
 | Fish1–3, Manta (из «Manta ray»), Shark (FBX, анимация Swim) | Quaternius | CC0 | `game/assets/fish/` |
+| Factory Kit: machine (корпус насоса) + `Textures/colormap.png` | Kenney | CC0 | `game/assets/factory/` |

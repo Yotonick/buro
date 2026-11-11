@@ -3,6 +3,7 @@ extends Node
 ##   --autostart=N       хост начинает смену, когда в лобби N игроков
 ##   --map=КЛЮЧ          …на этом уровне (по умолчанию полигон)
 ##   --burst=T           хост на T-й секунде уровня прорывает две течи («Глубокая тарелка»)
+##   --pump=T            хост на T-й секунде собирает трубу насоса (ровно, с лентой) и открывает вентиль
 ##   --lobby=T           хост на T-й секунде уровня возвращает бригаду в лобби
 ##   --walk=A-B          свой персонаж идёт вперёд с A по B секунду на уровне
 ##   --grab=A-B          свой персонаж в это время тянет обе руки вперёд-вниз
@@ -23,6 +24,7 @@ var _tape_done := false
 var _give_done := false
 var _give_t := 0.0
 var _burst_done := false
+var _pump_done := false
 var _lobby_done := false
 var _autostarted := false
 var _prev := {}      ## имя -> позиция на прошлом тике
@@ -68,6 +70,9 @@ func _physics_process(dt: float) -> void:
 			_burst_done = true
 			_level.leaks[0].burst()
 			_level.leaks[5].burst()
+		if args.has("pump") and not _pump_done and _t >= float(args["pump"]) and "pump" in _level:
+			_pump_done = true
+			_fix_pump(_level.pump)
 		if args.has("lobby") and not _lobby_done and _t >= float(args["lobby"]):
 			_lobby_done = true
 			Game.back_to_lobby()
@@ -116,6 +121,34 @@ func _in_window(key: String) -> bool:
 static func _p(v: Vector3) -> Array:
 	return [snappedf(v.x, 0.01), snappedf(v.y, 0.01), snappedf(v.z, 0.01)]
 
+## Уложить три куска трубы ровно от приямка до насоса, примотать стыки, открыть вентиль (хост).
+func _fix_pump(pump: Node3D) -> void:
+	var w: Node = _level.world
+	var s: Vector3 = pump.end_at(0)[0]
+	var e: Vector3 = pump.end_at(1)[0]
+	var dir := (e - s).normalized()
+	var x := Vector3.UP.cross(-dir).normalized()
+	var step: float = pump.PIPE_LEN + 0.0167
+	for i in 3:
+		var p: RigidBody3D = pump.pieces[i]
+		p.global_transform = Transform3D(Basis(x, -dir, x.cross(-dir)), s + dir * (step * i + pump.PIPE_LEN * 0.5))
+		p.linear_velocity = Vector3.ZERO
+		p.angular_velocity = Vector3.ZERO
+	var pts := [[null, s - dir * 0.2 + Vector3.DOWN * 0.12]]
+	for p in pump.pieces:
+		pts.append([p, p.global_position - dir * 0.4])
+		pts.append([p, p.global_position + dir * 0.4])
+	pts.append([null, e + dir * 0.2 + Vector3.DOWN * 0.12])
+	for i in range(0, pts.size(), 2):
+		var a: Node3D = pts[i][0]
+		var b: Node3D = pts[i + 1][0]
+		var pa: Vector3 = pts[i][1]
+		var pb: Vector3 = pts[i + 1][1]
+		w.spawn("tape", {"a": 0 if a == null else w.id_of(a), "la": pa if a == null else a.global_transform.affine_inverse() * pa, "na": Vector3.UP,
+			"b": 0 if b == null else w.id_of(b), "lb": pb if b == null else b.global_transform.affine_inverse() * pb, "nb": Vector3.UP,
+			"rest": pa.distance_to(pb)})
+	pump._acc = pump.VALVE_FULL
+
 func _report() -> void:
 	var out := {"steps": _steps, "scene": "", "players": {}, "dummies": [], "helmets": [], "bodies": [], "tapes": [], "rolls": [],
 		"leaks": [], "flood": -1.0}
@@ -145,4 +178,6 @@ func _report() -> void:
 		out["leaks"].append(l.state)
 	for f in get_tree().get_nodes_in_group("flood"):
 		out["flood"] = snappedf(f.level, 0.001)
+	for pm in get_tree().get_nodes_in_group("pump"):
+		out["pump"] = [pm.state, snappedf(pm.valve, 0.05), pm.loose_joints.size()]
 	print("PROBE ", JSON.stringify(out))

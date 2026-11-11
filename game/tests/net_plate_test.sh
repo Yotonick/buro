@@ -1,6 +1,6 @@
 #!/bin/bash
 # Сетевой тест «Глубокой тарелки»: хост + клиент начинают смену, второй клиент входит позже.
-# Хост прорывает две течи; у всех должны совпасть течи и уровень воды. Потом хост
+# Хост прорывает две течи и чинит насос; у всех должны совпасть течи, уровень воды и насос. Потом хост
 # возвращает бригаду в лобби — все должны оказаться там.
 # Запуск: game/tests/net_plate_test.sh /путь/к/godot
 GODOT="${1:-godot}"
@@ -8,7 +8,7 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$(mktemp -d)"
 PORT=27993
 g() { local log=$1; shift; "$GODOT" --headless --path "$DIR" -- --probe --port=$PORT ${BAD_LINK:+--bad-link=$BAD_LINK} "$@" > "$OUT/$log.log" 2>&1 & }
-g host --host --name=Хост --autostart=2 --map=deep_plate --burst=2 --lobby=11 --probe-report=10 --report-after=14.5 --quit-after=16
+g host --host --name=Хост --autostart=2 --map=deep_plate --burst=2 --pump=3 --lobby=11 --probe-report=10 --report-after=14.5 --quit-after=16
 sleep 1.5
 g vasya --join=127.0.0.1 --name=Вася --walk=1-2 --probe-report=9.6 --report-after=14 --quit-after=16
 sleep 5
@@ -35,10 +35,12 @@ if len(rep) == 3:
     check(all(r["scene"].endswith("deep_plate.tscn") for r in rep.values()), "все в «Глубокой тарелке» (и опоздавшая Лена)")
     check(sorted(h["players"]) == ["Вася", "Лена", "Хост"], "на хосте три персонажа")
     check(sum(1 for s in h["leaks"] if s != 0) == 2, "у хоста прорвало две течи: %s" % h["leaks"])
-    check(h["flood"] > 0.01, "у хоста поднялась вода: %.3f" % h["flood"])
+    check(h["flood"] > 0.005, "у хоста поднялась вода: %.3f" % h["flood"])
+    check(h.get("pump", [0])[0] == 2, "у хоста насос качает: %s" % h.get("pump"))
     for n in ("vasya", "lena"):
         r = rep[n]
         check(r["leaks"] == h["leaks"], "%s видит те же течи: %s" % (n, r["leaks"]))
+        check(r.get("pump") == h.get("pump"), "%s видит тот же насос: %s" % (n, r.get("pump")))
         check(abs(r["flood"] - h["flood"]) < 0.02, "%s видит тот же уровень воды: %.3f (у хоста %.3f)" % (n, r["flood"], h["flood"]))
         ok = len(r["bodies"]) == len(h["bodies"]) and all(all(abs(x - y) <= 0.2 for x, y in zip(a, b)) for a, b in zip(h["bodies"], r["bodies"]))
         check(ok, "%s: все %d предметов там же, где у хоста" % (n, len(h["bodies"])))

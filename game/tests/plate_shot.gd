@@ -26,6 +26,15 @@ func _ready():
 	k.teleport(Vector3(4, 1, 0))
 	cam._arm.spring_length = 6.0; cam.yaw = 1.2; cam.pitch = -0.5
 	await f(150); shot("water")
+	lvl.flood.level = 0.1
+	k.teleport(Vector3(0.5, 1, -5.6))
+	cam._arm.spring_length = 4.5; cam.yaw = 0.0; cam.pitch = -0.35
+	await f(60); shot("pump_broken")
+	var probe = load("res://tests/net_probe.gd").new()
+	probe._level = lvl
+	probe._fix_pump(lvl.pump)
+	await f(30)
+	await f(90); shot("pump_on")
 	get_tree().quit()
 func shot(n):
 	print("SHOT %s frame=%d" % [n, Engine.get_frames_drawn()])

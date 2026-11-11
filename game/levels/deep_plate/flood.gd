@@ -44,9 +44,9 @@ func _ready() -> void:
 	add_child(_surface)
 	_show()
 
-## Поставить скорость подъёма (сумма течей). Только хост.
-func set_flow(total: float) -> void:
-	rate = total * RISE
+## Поставить скорость подъёма: total — сумма течей, drain — сколько откачивает насос (м/с). Только хост.
+func set_flow(total: float, drain := 0.0) -> void:
+	rate = total * RISE - (drain if level > 0.0 else 0.0)
 
 func net_state(d: Dictionary) -> void:
 	level = float(d.get("l", level))

@@ -12,7 +12,7 @@ const EnetTransport := preload("res://net/enet_transport.gd")
 const NetTransport := preload("res://net/net_transport.gd")
 
 const MAX_PLAYERS := 4
-const PROTOCOL_VERSION := 5
+const PROTOCOL_VERSION := 6
 const CONNECT_TIMEOUT := 8.0
 const MAX_NAME_LENGTH := 16
 const PLAYER_COLORS: Array[Color] = [
